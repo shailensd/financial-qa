@@ -1,14 +1,11 @@
 # FinDoc Intelligence - Multi-Model Financial Q&A with Citation Verification
-
-## Checkpoint Submission Info
-- Team ID: TEAM_ID_HERE
+- Team ID: Group 18
 - Project Title: FinDoc Intelligence - Multi-Model Financial Q&A with Citation Verification
-- Repository: REPO_LINK_HERE
+
 
 ## Team Members
-- Member 1: NAME (Role: Backend + Agent)
-- Member 2: NAME (Role: Retrieval + Evaluation)
-- Member 3: NAME (Role: Frontend + Integration)
+- Member 1: Shailen Sutradhar
+
 
 ## Problem Statement
 Financial analysts spend significant time reading long SEC filings (10-K, 10-Q). Generic LLM systems can hallucinate numbers and unsupported claims. This project builds a domain-specific, evaluation-first AI assistant that answers financial questions with citations and refusal guardrails for out-of-scope prompts.
@@ -97,5 +94,4 @@ uvicorn app.main:app --reload
 Open API docs:
 - http://127.0.0.1:8000/docs
 
-## Checkpoint Notes
-This repository includes initial implementation code (not README-only), along with a seeded evaluation artifact and modular project structure to support full implementation in upcoming milestones.
+
