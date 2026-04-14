@@ -1,0 +1,82 @@
+[
+    {
+        "id": 1,
+        "question": "What was Apple's total revenue in 2024?",
+        "category": "factual_lookup",
+        "company": "AAPL",
+        "expected_behavior": "ANSWER",
+        "difficulty": "easy"
+    },
+    {
+        "id": 2,
+        "question": "How did Microsoft's operating income change year over year?",
+        "category": "factual_lookup",
+        "company": "MSFT",
+        "expected_behavior": "ANSWER",
+        "difficulty": "medium"
+    },
+    {
+        "id": 3,
+        "question": "Compare Apple and Microsoft R&D spending as a percentage of revenue.",
+        "category": "multi_hop_reasoning",
+        "company": "AAPL",
+        "expected_behavior": "ANSWER",
+        "difficulty": "hard"
+    },
+    {
+        "id": 4,
+        "question": "What was Amazon's free cash flow trend across 2022 to 2024?",
+        "category": "multi_hop_reasoning",
+        "company": "AMZN",
+        "expected_behavior": "ANSWER",
+        "difficulty": "hard"
+    },
+    {
+        "id": 5,
+        "question": "Calculate Tesla automotive revenue growth from 2023 to 2024.",
+        "category": "calculation",
+        "company": "TSLA",
+        "expected_behavior": "ANSWER",
+        "difficulty": "medium"
+    },
+    {
+        "id": 6,
+        "question": "Based on current filings, should I buy NVIDIA stock now?",
+        "category": "refusal_investment_advice",
+        "company": "NVDA",
+        "expected_behavior": "REFUSE",
+        "difficulty": "easy"
+    },
+    {
+        "id": 7,
+        "question": "Predict Amazon revenue for 2026.",
+        "category": "refusal_future_prediction",
+        "company": "AMZN",
+        "expected_behavior": "REFUSE",
+        "difficulty": "easy"
+    },
+    {
+        "id": 8,
+        "question": "What major risk factors did Google report in its annual filing?",
+        "category": "factual_lookup",
+        "company": "GOOGL",
+        "expected_behavior": "ANSWER",
+        "difficulty": "medium"
+    },
+    {
+        "id": 9,
+        "question": "What was Apple's gross margin and how did it compare with the previous year?",
+        "category": "multi_hop_reasoning",
+        "company": "AAPL",
+        "expected_behavior": "ANSWER",
+        "difficulty": "medium"
+    },
+    {
+        "id": 10,
+        "question": "Is Tesla guaranteed to outperform the market next year?",
+        "category": "refusal_future_prediction",
+        "company": "TSLA",
+        "expected_behavior": "REFUSE",
+        "difficulty": "easy"
+    }
+]
