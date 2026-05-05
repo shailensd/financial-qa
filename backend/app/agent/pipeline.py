@@ -1,6 +1,52 @@
 from app.ml.hybrid_retrieval import HybridRetriever
 
 
+# RefusalGuard keyword lists
+INVESTMENT_KEYWORDS = ["buy", "sell", "invest", "recommend", "portfolio", "stock pick"]
+PREDICTION_KEYWORDS = ["will", "predict", "forecast", "next quarter", "next year", "price target"]
+
+
+def refusal_guard_node(state: dict) -> dict:
+    """
+    RefusalGuard node: checks query against prohibited keyword lists.
+    
+    Blocks investment advice queries and future prediction queries before
+    they reach the Planner node.
+    
+    Args:
+        state: Agent state dict containing at minimum:
+            - query: str - The user's query text
+    
+    Returns:
+        dict with refusal status:
+            - refusal: bool - True if query should be refused
+            - refusal_reason: str | None - Reason for refusal
+    """
+    query = state.get("query", "").lower()
+    
+    # Check for investment advice keywords
+    for keyword in INVESTMENT_KEYWORDS:
+        if keyword in query:
+            return {
+                "refusal": True,
+                "refusal_reason": "investment_advice_prohibited"
+            }
+    
+    # Check for future prediction keywords
+    for keyword in PREDICTION_KEYWORDS:
+        if keyword in query:
+            return {
+                "refusal": True,
+                "refusal_reason": "future_prediction_prohibited"
+            }
+    
+    # Query is allowed
+    return {
+        "refusal": False,
+        "refusal_reason": None
+    }
+
+
 class PlannerExecutorCriticPipeline:
     """Checkpoint skeleton of Planner-Executor-Critic architecture."""
 
