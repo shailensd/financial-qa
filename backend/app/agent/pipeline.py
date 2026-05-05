@@ -244,6 +244,186 @@ Example format:
         return {"plan": []}
 
 
+def executor_node(state: dict) -> dict:
+    """
+    Executor node: executes tool calls from the plan and generates draft response.
+    
+    Iterates through the plan, dispatches each tool call via execute_tool(),
+    collects all tool results, builds a final generation prompt combining
+    tool results with retrieved chunk texts, calls LLM to generate draft response,
+    and populates citations from chunk_ids returned by tools.
+    
+    Tool execution errors are logged but do not stop execution - the executor
+    continues with remaining tools.
+    
+    Args:
+        state: Agent state dict containing:
+            - plan: list[dict] - Ordered list of tool calls with {"tool": str, "inputs": dict}
+            - query: str - The user's query text
+            - model_used: str - LLM model to use (default: "gemini")
+            - ollama_base_url: str - Ollama API base URL (optional)
+            - gemini_api_key: str - Gemini API key (optional)
+    
+    Returns:
+        dict with:
+            - tool_results: list[dict] - Results from each tool execution
+            - draft_response: str - LLM-generated response text
+            - citations: list[dict] - Citation objects with chunk_id and relevance_score
+    """
+    plan = state.get("plan", [])
+    query = state.get("query", "")
+    model_used = state.get("model_used", "gemini")
+    
+    # Initialize retriever for tool execution
+    retriever = HybridRetriever()
+    
+    # Initialize LLM router
+    llm_router = LLMRouter(
+        ollama_base_url=state.get("ollama_base_url", "http://localhost:11434"),
+        gemini_api_key=state.get("gemini_api_key")
+    )
+    
+    # Execute each tool call and collect results
+    tool_results = []
+    all_chunk_texts = []
+    all_chunk_ids = []
+    
+    for tool_call in plan:
+        tool_name = tool_call.get("tool")
+        tool_inputs = tool_call.get("inputs", {})
+        
+        try:
+            # Execute tool
+            from app.agent.tools import execute_tool
+            result = execute_tool(tool_name, tool_inputs, retriever)
+            
+            # Log successful execution
+            logger.info(
+                f"Tool executed successfully: {tool_name} with inputs {tool_inputs}"
+            )
+            
+            # Store tool result
+            tool_result = {
+                "tool": tool_name,
+                "inputs": tool_inputs,
+                "output": result,
+                "status": "success"
+            }
+            tool_results.append(tool_result)
+            
+            # Extract chunk texts and IDs for citation tracking
+            if tool_name == "LOOKUP":
+                chunk_text = result.get("chunk_text")
+                chunk_id = result.get("chunk_id")
+                if chunk_text:
+                    all_chunk_texts.append(chunk_text)
+                if chunk_id:
+                    all_chunk_ids.append(chunk_id)
+            
+            elif tool_name == "COMPARE":
+                comparison_result = result.get("comparison_result", {})
+                
+                # Extract from entity1
+                entity1 = comparison_result.get("entity1", {})
+                if entity1.get("chunk_text"):
+                    all_chunk_texts.append(entity1["chunk_text"])
+                if entity1.get("chunk_id"):
+                    all_chunk_ids.append(entity1["chunk_id"])
+                
+                # Extract from entity2
+                entity2 = comparison_result.get("entity2", {})
+                if entity2.get("chunk_text"):
+                    all_chunk_texts.append(entity2["chunk_text"])
+                if entity2.get("chunk_id"):
+                    all_chunk_ids.append(entity2["chunk_id"])
+        
+        except Exception as e:
+            # Log error but continue with remaining tools
+            logger.error(
+                f"Tool execution failed: {tool_name} with inputs {tool_inputs}. "
+                f"Error: {e}"
+            )
+            
+            # Store error result
+            tool_result = {
+                "tool": tool_name,
+                "inputs": tool_inputs,
+                "output": None,
+                "status": "error",
+                "error": str(e)
+            }
+            tool_results.append(tool_result)
+    
+    # Build final generation prompt
+    # Combine tool results with retrieved chunk texts
+    tool_results_text = "\n\n".join([
+        f"Tool: {tr['tool']}\nInputs: {tr['inputs']}\nOutput: {tr['output']}"
+        for tr in tool_results
+        if tr['status'] == 'success'
+    ])
+    
+    chunks_text = "\n\n---\n\n".join([
+        f"Source Chunk:\n{chunk}"
+        for chunk in all_chunk_texts
+    ])
+    
+    system_instructions = """You are a financial Q&A assistant. Your task is to generate accurate, well-grounded responses based on tool results and source documents.
+
+Guidelines:
+1. Base your response ONLY on the provided tool results and source chunks
+2. Cite specific numbers and facts from the source chunks
+3. If tool results contain calculations, include them in your response
+4. Be precise with numerical values - use exact numbers from sources
+5. If information is insufficient, acknowledge the limitation
+6. Keep responses concise and focused on answering the query"""
+    
+    user_prompt = f"""Query: {query}
+
+Tool Results:
+{tool_results_text}
+
+Source Documents:
+{chunks_text}
+
+Please provide a comprehensive answer to the query based on the tool results and source documents above."""
+    
+    # Prepare messages for LLM
+    messages = [
+        {"role": "system", "content": system_instructions},
+        {"role": "user", "content": user_prompt}
+    ]
+    
+    # Generate draft response
+    try:
+        draft_response = llm_router.complete(
+            model=model_used,
+            messages=messages,
+            temperature=0.3  # Low temperature for factual accuracy
+        )
+        
+        logger.info(f"Draft response generated successfully (length: {len(draft_response)})")
+    
+    except Exception as e:
+        logger.error(f"Failed to generate draft response: {e}")
+        draft_response = "Error: Failed to generate response due to LLM error."
+    
+    # Populate citations from chunk_ids
+    # Each chunk_id gets a citation with relevance score
+    # For now, assign equal relevance scores (could be improved with actual relevance scoring)
+    citations = []
+    for chunk_id in all_chunk_ids:
+        citations.append({
+            "chunk_id": chunk_id,
+            "relevance_score": 0.9  # Default relevance score
+        })
+    
+    return {
+        "tool_results": tool_results,
+        "draft_response": draft_response,
+        "citations": citations
+    }
+
+
 class PlannerExecutorCriticPipeline:
     """Checkpoint skeleton of Planner-Executor-Critic architecture."""
 
