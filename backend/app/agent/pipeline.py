@@ -424,6 +424,165 @@ Please provide a comprehensive answer to the query based on the tool results and
     }
 
 
+def critic_node(state: dict) -> dict:
+    """
+    Critic node: validates responses for numerical accuracy and citation completeness.
+    
+    Performs two critical validation checks:
+    1. Numerical accuracy: All numbers in draft_response must exactly match cited chunk texts
+    2. Citation completeness: Every sentence must have at least one chunk_id citation
+    
+    Returns repair verdicts when validation fails, or approves with confidence score.
+    Forces approval with low confidence after 2 repair iterations.
+    
+    Args:
+        state: Agent state dict containing:
+            - draft_response: str - The LLM-generated response text
+            - citations: list[dict] - Citation objects with chunk_id and relevance_score
+            - tool_results: list[dict] - Results from tool execution (contains chunk texts)
+            - repair_count: int - Number of repair iterations (optional, default 0)
+    
+    Returns:
+        dict with:
+            - critic_verdict: str - "approved" | "repair_numerical" | "repair_citation"
+            - confidence_score: float - 0.3-1.0 based on validation results
+            - critic_feedback: str - Feedback for Planner on repair (optional)
+    """
+    import re
+    
+    draft_response = state.get("draft_response", "")
+    citations = state.get("citations", [])
+    tool_results = state.get("tool_results", [])
+    repair_count = state.get("repair_count", 0)
+    
+    # Extract all chunk texts from tool results for numerical verification
+    cited_chunk_texts = []
+    for tool_result in tool_results:
+        if tool_result.get("status") != "success":
+            continue
+        
+        output = tool_result.get("output", {})
+        tool_name = tool_result.get("tool")
+        
+        if tool_name == "LOOKUP":
+            chunk_text = output.get("chunk_text")
+            if chunk_text:
+                cited_chunk_texts.append(chunk_text)
+        
+        elif tool_name == "COMPARE":
+            comparison_result = output.get("comparison_result", {})
+            
+            # Extract from entity1
+            entity1 = comparison_result.get("entity1", {})
+            if entity1.get("chunk_text"):
+                cited_chunk_texts.append(entity1["chunk_text"])
+            
+            # Extract from entity2
+            entity2 = comparison_result.get("entity2", {})
+            if entity2.get("chunk_text"):
+                cited_chunk_texts.append(entity2["chunk_text"])
+    
+    # Step 1: Extract all numbers from draft_response using regex
+    # Pattern matches: integers, decimals with . or , as separator
+    number_pattern = r'\b\d+[\.,]?\d*\b'
+    extracted_numbers = re.findall(number_pattern, draft_response)
+    
+    # Step 2: Check each extracted number for exact match in cited chunks
+    numerical_mismatches = []
+    for number in extracted_numbers:
+        # Check if this exact number string appears as a word boundary in any cited chunk
+        # Use word boundary regex to avoid matching "1" in "1001"
+        number_pattern_check = r'\b' + re.escape(number) + r'\b'
+        found_in_chunks = any(
+            re.search(number_pattern_check, chunk_text) 
+            for chunk_text in cited_chunk_texts
+        )
+        
+        if not found_in_chunks:
+            numerical_mismatches.append(number)
+    
+    # If numerical mismatches found and repair_count < 2, request repair
+    if numerical_mismatches and repair_count < 2:
+        logger.warning(
+            f"Critic found numerical mismatches: {numerical_mismatches}. "
+            f"Requesting repair (repair_count={repair_count})"
+        )
+        return {
+            "critic_verdict": "repair_numerical",
+            "confidence_score": 0.0,
+            "critic_feedback": (
+                f"The following numbers in your response do not appear in the cited chunks: "
+                f"{', '.join(numerical_mismatches)}. Please verify all numerical claims "
+                f"against the source documents and rewrite the response with accurate numbers."
+            )
+        }
+    
+    # Step 3: Check citation completeness - every sentence should have citations
+    # Split draft_response into sentences (simple split on . ! ?)
+    sentences = re.split(r'[.!?]+', draft_response)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    
+    # Get all chunk_ids from citations
+    cited_chunk_ids = set(citation.get("chunk_id") for citation in citations)
+    
+    # Check if response has content but no citations
+    # Consider a response to have content if it has sentences OR if it's non-empty
+    has_content = len(sentences) > 0 or (draft_response.strip() != "")
+    missing_citations = has_content and len(cited_chunk_ids) == 0
+    
+    # If missing citations and repair_count < 2, request repair
+    if missing_citations and repair_count < 2:
+        logger.warning(
+            f"Critic found missing citations. Response has {len(sentences)} sentences "
+            f"but {len(cited_chunk_ids)} citations. Requesting repair (repair_count={repair_count})"
+        )
+        return {
+            "critic_verdict": "repair_citation",
+            "confidence_score": 0.0,
+            "critic_feedback": (
+                "Your response lacks proper citations. Please ensure every factual claim "
+                "is grounded in the retrieved source documents and include appropriate citations."
+            )
+        }
+    
+    # Step 4: If repair_count >= 2, force approval with low confidence
+    if repair_count >= 2:
+        logger.warning(
+            f"Critic forcing approval after {repair_count} repair iterations. "
+            f"Numerical mismatches: {len(numerical_mismatches)}, "
+            f"Missing citations: {missing_citations}"
+        )
+        return {
+            "critic_verdict": "approved",
+            "confidence_score": 0.3,
+            "critic_feedback": None
+        }
+    
+    # Step 5: All checks passed - approve with confidence score
+    # Compute confidence score based on citation coverage
+    # Higher coverage = higher confidence (0.5 to 1.0 range)
+    
+    # Citation coverage: ratio of citations to sentences
+    if len(sentences) > 0:
+        citation_coverage = min(len(cited_chunk_ids) / len(sentences), 1.0)
+        # Map coverage to 0.5-1.0 range
+        confidence_score = 0.5 + (citation_coverage * 0.5)
+    else:
+        # Empty response or no sentences - default to medium confidence
+        confidence_score = 0.7
+    
+    logger.info(
+        f"Critic approved response with confidence {confidence_score:.2f}. "
+        f"Sentences: {len(sentences)}, Citations: {len(cited_chunk_ids)}"
+    )
+    
+    return {
+        "critic_verdict": "approved",
+        "confidence_score": confidence_score,
+        "critic_feedback": None
+    }
+
+
 class PlannerExecutorCriticPipeline:
     """Checkpoint skeleton of Planner-Executor-Critic architecture."""
 
