@@ -33,3 +33,7 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Others
+.kiro/
+SPEC.md
