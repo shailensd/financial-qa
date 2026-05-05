@@ -1,0 +1,306 @@
+[
+  {
+    "id": "planner_001",
+    "injection_target": "planner",
+    "query": "What was Tesla's net income in FY2023?",
+    "expected_plan": [
+      {
+        "tool": "LOOKUP",
+        "inputs": {
+          "entity": "Tesla",
+          "attribute": "net income FY2023"
+        }
+      }
+    ]
+  },
+  {
+    "id": "planner_002",
+    "injection_target": "planner",
+    "query": "Calculate the revenue growth rate for Meta from 2022 to 2023.",
+    "expected_plan": [
+      {
+        "tool": "LOOKUP",
+        "inputs": {
+          "entity": "Meta",
+          "attribute": "revenue 2022"
+        }
+      },
+      {
+        "tool": "LOOKUP",
+        "inputs": {
+          "entity": "Meta",
+          "attribute": "revenue 2023"
+        }
+      },
+      {
+        "tool": "CALCULATE",
+        "inputs": {
+          "expression": "(revenue_2023 - revenue_2022) / revenue_2022 * 100"
+        }
+      }
+    ]
+  },
+  {
+    "id": "planner_003",
+    "injection_target": "planner",
+    "query": "Compare Netflix's operating margin in Q1 2023 versus Q1 2024.",
+    "expected_plan": [
+      {
+        "tool": "COMPARE",
+        "inputs": {
+          "entity1": "Netflix",
+          "period1": "Q1 2023",
+          "entity2": "Netflix",
+          "period2": "Q1 2024"
+        }
+      }
+    ]
+  },
+  {
+    "id": "planner_004",
+    "injection_target": "planner",
+    "query": "What were Amazon's total assets at the end of fiscal year 2023?",
+    "expected_plan": [
+      {
+        "tool": "LOOKUP",
+        "inputs": {
+          "entity": "Amazon",
+          "attribute": "total assets FY2023"
+        }
+      }
+    ]
+  },
+  {
+    "id": "planner_005",
+    "injection_target": "planner",
+    "query": "How does Google's R&D spending compare to Microsoft's in 2023?",
+    "expected_plan": [
+      {
+        "tool": "COMPARE",
+        "inputs": {
+          "entity1": "Google",
+          "period1": "2023",
+          "entity2": "Microsoft",
+          "period2": "2023"
+        }
+      }
+    ]
+  },
+  {
+    "id": "planner_006",
+    "injection_target": "planner",
+    "query": "What is Intel's debt-to-equity ratio for 2023?",
+    "expected_plan": [
+      {
+        "tool": "LOOKUP",
+        "inputs": {
+          "entity": "Intel",
+          "attribute": "total debt 2023"
+        }
+      },
+      {
+        "tool": "LOOKUP",
+        "inputs": {
+          "entity": "Intel",
+          "attribute": "total equity 2023"
+        }
+      },
+      {
+        "tool": "CALCULATE",
+        "inputs": {
+          "expression": "total_debt / total_equity"
+        }
+      }
+    ]
+  },
+  {
+    "id": "planner_007",
+    "injection_target": "planner",
+    "query": "Find Adobe's earnings per share for fiscal year 2023.",
+    "expected_plan": [
+      {
+        "tool": "LOOKUP",
+        "inputs": {
+          "entity": "Adobe",
+          "attribute": "earnings per share FY2023"
+        }
+      }
+    ]
+  },
+  {
+    "id": "planner_008",
+    "injection_target": "planner",
+    "query": "What was IBM's operating expense for cloud services in fiscal year 2022?",
+    "expected_plan": [
+      {
+        "tool": "LOOKUP",
+        "inputs": {
+          "entity": "IBM",
+          "attribute": "cloud services operating expense FY2022"
+        }
+      }
+    ]
+  },
+  {
+    "id": "planner_009",
+    "injection_target": "planner",
+    "query": "Compare Walmart's gross profit margin between 2022 and 2023.",
+    "expected_plan": [
+      {
+        "tool": "COMPARE",
+        "inputs": {
+          "entity1": "Walmart",
+          "period1": "2022",
+          "entity2": "Walmart",
+          "period2": "2023"
+        }
+      }
+    ]
+  },
+  {
+    "id": "planner_010",
+    "injection_target": "planner",
+    "query": "What was Salesforce's customer acquisition cost in Q4 2023?",
+    "expected_plan": [
+      {
+        "tool": "LOOKUP",
+        "inputs": {
+          "entity": "Salesforce",
+          "attribute": "customer acquisition cost Q4 2023"
+        }
+      }
+    ]
+  },
+  {
+    "id": "planner_011",
+    "injection_target": "planner",
+    "query": "Calculate the year-over-year change in Nvidia's data center revenue from 2022 to 2023.",
+    "expected_plan": [
+      {
+        "tool": "LOOKUP",
+        "inputs": {
+          "entity": "Nvidia",
+          "attribute": "data center revenue 2022"
+        }
+      },
+      {
+        "tool": "LOOKUP",
+        "inputs": {
+          "entity": "Nvidia",
+          "attribute": "data center revenue 2023"
+        }
+      },
+      {
+        "tool": "CALCULATE",
+        "inputs": {
+          "expression": "((revenue_2023 - revenue_2022) / revenue_2022) * 100"
+        }
+      }
+    ]
+  },
+  {
+    "id": "planner_012",
+    "injection_target": "planner",
+    "query": "How does Ford's operating cash flow in 2023 compare to General Motors?",
+    "expected_plan": [
+      {
+        "tool": "COMPARE",
+        "inputs": {
+          "entity1": "Ford",
+          "period1": "2023",
+          "entity2": "General Motors",
+          "period2": "2023"
+        }
+      }
+    ]
+  },
+  {
+    "id": "critic_001",
+    "injection_target": "critic",
+    "query": "What was Boeing's revenue in 2023?",
+    "draft_response": "Boeing's revenue in 2023 was $77.8 billion, representing a 17% increase from the previous year.",
+    "cited_chunks": [
+      "Boeing reported total revenues of $77.794 billion for fiscal year 2023."
+    ],
+    "expected_verdict": "approved",
+    "reasoning": "The number $77.8 billion matches the cited chunk ($77.794 billion rounded), and the claim is grounded."
+  },
+  {
+    "id": "critic_002",
+    "injection_target": "critic",
+    "query": "What was Coca-Cola's net income in Q2 2023?",
+    "draft_response": "Coca-Cola reported net income of $3.2 billion in Q2 2023.",
+    "cited_chunks": [
+      "The Coca-Cola Company announced net income of $2.4 billion for the second quarter of 2023."
+    ],
+    "expected_verdict": "repair_numerical",
+    "reasoning": "The draft states $3.2 billion but the cited chunk shows $2.4 billion - numerical mismatch."
+  },
+  {
+    "id": "critic_003",
+    "injection_target": "critic",
+    "query": "What were Disney's streaming subscriber numbers in 2023?",
+    "draft_response": "Disney+ had 150 million subscribers globally at the end of 2023. The company also saw strong growth in Hulu subscriptions.",
+    "cited_chunks": [
+      "Disney+ reached 150.2 million paid subscribers as of December 31, 2023."
+    ],
+    "expected_verdict": "repair_citation",
+    "reasoning": "The first sentence is grounded, but the claim about Hulu growth has no citation."
+  },
+  {
+    "id": "critic_004",
+    "injection_target": "critic",
+    "query": "What was Pfizer's R&D spending in 2023?",
+    "draft_response": "Pfizer invested $10.7 billion in research and development during fiscal year 2023, which represented approximately 20% of total revenue.",
+    "cited_chunks": [
+      "Research and development expenses were $10.679 billion in 2023.",
+      "Total revenues for 2023 were $58.496 billion."
+    ],
+    "expected_verdict": "approved",
+    "reasoning": "Both numbers are accurately cited and the percentage calculation is verifiable from the chunks."
+  },
+  {
+    "id": "critic_005",
+    "injection_target": "critic",
+    "query": "What was Starbucks' same-store sales growth in 2023?",
+    "draft_response": "Starbucks reported same-store sales growth of 8% in fiscal 2023.",
+    "cited_chunks": [
+      "Comparable store sales increased 7% globally for fiscal year 2023."
+    ],
+    "expected_verdict": "repair_numerical",
+    "reasoning": "Draft claims 8% but cited chunk shows 7% - numerical mismatch."
+  },
+  {
+    "id": "critic_006",
+    "injection_target": "critic",
+    "query": "What were JPMorgan's total deposits in 2023?",
+    "draft_response": "JPMorgan Chase held total deposits of $2.4 trillion as of December 31, 2023, making it the largest bank by deposits in the United States.",
+    "cited_chunks": [
+      "Total deposits were $2.38 trillion at year-end 2023."
+    ],
+    "expected_verdict": "repair_citation",
+    "reasoning": "The deposit amount is accurate (rounded), but the claim about being the largest bank lacks citation."
+  },
+  {
+    "id": "critic_007",
+    "injection_target": "critic",
+    "query": "What was ExxonMobil's capital expenditure in 2023?",
+    "draft_response": "ExxonMobil's capital and exploration expenditures totaled $23.1 billion in 2023.",
+    "cited_chunks": [
+      "Capital and exploration expenditures in 2023 were $23.09 billion."
+    ],
+    "expected_verdict": "approved",
+    "reasoning": "The number $23.1 billion accurately represents the cited $23.09 billion (rounded to one decimal)."
+  },
+  {
+    "id": "critic_008",
+    "injection_target": "critic",
+    "query": "What was Target's gross margin in fiscal 2023?",
+    "draft_response": "Target achieved a gross margin of 28.9% in fiscal year 2023, showing improvement from cost management initiatives.",
+    "cited_chunks": [
+      "Gross margin rate was 27.2 percent in fiscal 2023."
+    ],
+    "expected_verdict": "repair_numerical",
+    "reasoning": "Draft states 28.9% but cited chunk shows 27.2% - clear numerical mismatch."
+  }
+]
