@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import chromadb
+from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,13 +78,14 @@ class DocumentProcessor:
     
     def parse(self, file_path: str) -> List[RawSection]:
         r"""
-        Parse a plain-text SEC filing into sections.
+        Parse a SEC filing (HTML or plain-text) into sections.
         
+        For HTML files, cleans HTML tags using BeautifulSoup before processing.
         Splits document by section headers matching "Item \d+" pattern.
         Estimates page numbers based on character offset (assuming ~3000 chars/page).
         
         Args:
-            file_path: Path to plain-text 10-K or 10-Q file
+            file_path: Path to HTML or plain-text 10-K or 10-Q file
         
         Returns:
             List of RawSection objects with section_label, text, and page_number
@@ -98,7 +100,15 @@ class DocumentProcessor:
         
         # Read entire document
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
+            raw_content = f.read()
+        
+        # Clean HTML if file is HTML format
+        if file_path.lower().endswith(('.html', '.htm')):
+            soup = BeautifulSoup(raw_content, 'lxml')
+            # Extract text, preserving some structure with spaces
+            content = soup.get_text(separator=' ', strip=True)
+        else:
+            content = raw_content
         
         # Split by section headers (e.g., "Item 1.", "Item 7.", "Item 1A.")
         # Pattern matches: "Item" followed by digits and optional letter, followed by period or colon

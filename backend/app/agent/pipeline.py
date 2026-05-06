@@ -235,14 +235,21 @@ Example format:
         )
         
         # Parse JSON response
-        # Handle cases where LLM wraps JSON in markdown code blocks
+        # Handle cases where LLM wraps JSON in markdown code blocks or adds extra text
         response_text = response_text.strip()
-        if response_text.startswith("```json"):
-            response_text = response_text[7:]
-        if response_text.startswith("```"):
-            response_text = response_text[3:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3]
+        
+        # Remove markdown code blocks
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0]
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0]
+        
+        # Extract JSON array from text (find first [ to last ])
+        import re
+        json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
+        if json_match:
+            response_text = json_match.group(0)
+        
         response_text = response_text.strip()
         
         plan = json.loads(response_text)
@@ -292,6 +299,10 @@ Example format:
         return {"plan": []}
 
 
+# Global retriever instance (set by run_agent_pipeline)
+_current_retriever = None
+
+
 def executor_node(state: dict) -> dict:
     """
     Executor node: executes tool calls from the plan and generates draft response.
@@ -311,6 +322,7 @@ def executor_node(state: dict) -> dict:
             - model_used: str - LLM model to use (default: "gemini")
             - ollama_base_url: str - Ollama API base URL (optional)
             - gemini_api_key: str - Gemini API key (optional)
+            - retriever: HybridRetriever - The retriever instance (optional)
     
     Returns:
         dict with:
@@ -322,8 +334,16 @@ def executor_node(state: dict) -> dict:
     query = state.get("query", "")
     model_used = state.get("model_used", "gemini")
     
-    # Initialize retriever for tool execution
-    retriever = HybridRetriever()
+    # Get retriever from global variable (set by run_agent_pipeline)
+    global _current_retriever
+    retriever = _current_retriever
+    if retriever is None:
+        logger.error("No retriever available - tool execution will fail")
+        return {
+            "tool_results": [],
+            "draft_response": "Error: Retriever not available",
+            "citations": []
+        }
     
     # Initialize LLM router
     llm_router = LLMRouter(
@@ -419,11 +439,19 @@ def executor_node(state: dict) -> dict:
 
 Guidelines:
 1. Base your response ONLY on the provided tool results and source chunks
-2. Cite specific numbers and facts from the source chunks
-3. If tool results contain calculations, include them in your response
-4. Be precise with numerical values - use exact numbers from sources
-5. If information is insufficient, acknowledge the limitation
-6. Keep responses concise and focused on answering the query"""
+2. Extract and cite specific numbers from the source chunks - look carefully in tables and financial statements
+3. When you see financial data in tables, extract the relevant numbers (revenue, net sales, etc.)
+4. For revenue questions, look for terms like "Total net sales", "Net revenues", "Total revenues" in the source chunks
+5. Be precise with numerical values - use exact numbers from sources (including commas and dollar signs if present)
+6. If tool results contain calculations, include them in your response
+7. If information is insufficient, acknowledge the limitation
+8. Keep responses concise and focused on answering the query
+
+IMPORTANT NOTES:
+- Financial data is often presented in tables. Look for the specific metric requested (e.g., "Total net sales" for revenue) and extract the number from the appropriate row/column.
+- When a query asks about "FY2023" or "fiscal year 2023", the table column labeled "2023" represents that fiscal year.
+- Revenue and "Total net sales" are the same thing for most companies.
+- Always provide the answer directly - don't say you can't find it if the data is clearly in the source chunks."""
     
     user_prompt = f"""Query: {query}
 
@@ -432,6 +460,8 @@ Tool Results:
 
 Source Documents:
 {chunks_text}
+
+IMPORTANT: When reading financial tables, pay close attention to column headers. Tables typically show multiple years side by side (e.g., "2024  2023  2022"). Make sure you extract the number from the correct column that matches the year requested in the query.
 
 Please provide a comprehensive answer to the query based on the tool results and source documents above."""
     
@@ -536,13 +566,20 @@ def critic_node(state: dict) -> dict:
     extracted_numbers = re.findall(number_pattern, draft_response)
     
     # Step 2: Check each extracted number for exact match in cited chunks
+    # Be flexible with number formatting - allow for commas, dollar signs, etc.
     numerical_mismatches = []
     for number in extracted_numbers:
-        # Check if this exact number string appears as a word boundary in any cited chunk
+        # Normalize the number for comparison (remove commas)
+        normalized_number = number.replace(',', '')
+        
+        # Check if this number (or its normalized form) appears in any cited chunk
         # Use word boundary regex to avoid matching "1" in "1001"
         number_pattern_check = r'\b' + re.escape(number) + r'\b'
+        normalized_pattern_check = r'\b' + re.escape(normalized_number) + r'\b'
+        
         found_in_chunks = any(
-            re.search(number_pattern_check, chunk_text) 
+            re.search(number_pattern_check, chunk_text) or 
+            re.search(normalized_pattern_check, chunk_text)
             for chunk_text in cited_chunk_texts
         )
         
@@ -916,3 +953,193 @@ def build_agent_graph() -> StateGraph:
     logger.info("Agent graph built and compiled successfully")
     
     return compiled_graph
+
+
+async def run_agent_pipeline(
+    query: str,
+    session_id: str,
+    model_used: str,
+    db: Any,
+    retriever: Any,
+    ollama_base_url: str = "http://localhost:11434",
+    gemini_api_key: Optional[str] = None,
+    company: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Run the complete agent pipeline and log execution to database.
+    
+    This is the main entry point for executing queries through the
+    Planner-Executor-Critic pipeline. It handles:
+    1. Building and invoking the LangGraph
+    2. Tracking execution time
+    3. Persisting query and response to database
+    4. Logging structured execution trace
+    
+    Args:
+        query: User's query text
+        session_id: Session identifier for context tracking
+        model_used: LLM model to use ("llama", "gemma", or "gemini")
+        db: Database session for persistence
+        retriever: HybridRetriever instance for document retrieval
+        ollama_base_url: Ollama API base URL
+        gemini_api_key: Gemini API key
+        company: Optional company filter for retrieval
+        model_used: LLM model to use ("llama", "gemma", or "gemini")
+        db: Database session for persistence
+        ollama_base_url: Ollama API base URL
+        gemini_api_key: Gemini API key
+        company: Optional company filter for retrieval
+    
+    Returns:
+        dict with:
+            - response_text: Generated response
+            - confidence_score: Critic's confidence score
+            - refusal_flag: Whether query was refused
+            - refusal_reason: Reason for refusal if applicable
+            - citations: List of citation objects
+            - repair_count: Number of repair iterations
+            - latency_ms: Total execution time
+            - agent_trace: Execution trace for debugging
+    """
+    import time
+    from app.logging import structured_logger
+    from app import crud
+    
+    # Start timing
+    start_time = time.time()
+    
+    # Set global retriever for executor node to access
+    global _current_retriever
+    _current_retriever = retriever
+    
+    # Build initial state (without retriever - not serializable)
+    initial_state: AgentState = {
+        "query": query,
+        "session_id": session_id,
+        "model_used": model_used,
+        "company": company,
+        "ollama_base_url": ollama_base_url,
+        "gemini_api_key": gemini_api_key,
+        "repair_count": 0,
+        "turn_count": 0,
+        "refusal": False,
+        "refusal_reason": None,
+    }
+    
+    # Build and run graph
+    graph = build_agent_graph()
+    
+    try:
+        # Invoke graph with initial state
+        # Use thread_id for checkpointing (maps to session_id)
+        config = {"configurable": {"thread_id": session_id}}
+        final_state = await graph.ainvoke(initial_state, config)
+        
+        # Calculate latency
+        end_time = time.time()
+        latency_ms = int((end_time - start_time) * 1000)
+        
+        # Extract results from final state
+        response_text = final_state.get("draft_response", "")
+        confidence_score = final_state.get("confidence_score", 0.0)
+        refusal_flag = final_state.get("refusal", False)
+        refusal_reason = final_state.get("refusal_reason")
+        citations = final_state.get("citations", [])
+        repair_count = final_state.get("repair_count", 0)
+        plan = final_state.get("plan", [])
+        tool_results = final_state.get("tool_results", [])
+        critic_verdict = final_state.get("critic_verdict", "unknown")
+        
+        # Persist query to database
+        query_record = await crud.create_query(
+            db=db,
+            session_id=session_id,
+            query_text=query,
+            model_used=model_used,
+        )
+        
+        # Persist response to database
+        response_record = await crud.create_response(
+            db=db,
+            query_id=query_record.id,
+            response_text=response_text,
+            model_used=model_used,
+            confidence_score=confidence_score,
+            latency_ms=latency_ms,
+            refusal_flag=refusal_flag,
+            refusal_reason=refusal_reason,
+            repair_count=repair_count,
+        )
+        
+        # Persist citations to database
+        for citation in citations:
+            await crud.create_citation(
+                db=db,
+                response_id=response_record.id,
+                chunk_id=citation.get("chunk_id"),
+                relevance_score=citation.get("relevance_score", 0.9),
+            )
+        
+        # Extract chunk_ids for logging
+        chunk_ids = [c.get("chunk_id") for c in citations if c.get("chunk_id")]
+        
+        # Log structured execution trace
+        await structured_logger.log_request(
+            db=db,
+            session_id=session_id,
+            query_id=query_record.id,
+            query_text=query,
+            model_used=model_used,
+            plan=plan,
+            tool_results=tool_results,
+            chunk_ids=chunk_ids,
+            refusal_decision=refusal_flag,
+            critic_verdict=critic_verdict,
+            repair_count=repair_count,
+            total_latency_ms=latency_ms,
+            refusal_reason=refusal_reason,
+            confidence_score=confidence_score,
+            draft_response=response_text,
+        )
+        
+        # Commit database transaction
+        await db.commit()
+        
+        # Build response
+        return {
+            "response_text": response_text,
+            "confidence_score": confidence_score,
+            "refusal_flag": refusal_flag,
+            "refusal_reason": refusal_reason,
+            "citations": citations,
+            "repair_count": repair_count,
+            "latency_ms": latency_ms,
+            "agent_trace": {
+                "plan": plan,
+                "tool_results": tool_results,
+                "critic_verdict": critic_verdict,
+            }
+        }
+    
+    except Exception as e:
+        # Log error and rollback
+        logger.error(f"Agent pipeline failed: {e}", exc_info=True)
+        await db.rollback()
+        
+        # Calculate latency even for failed requests
+        end_time = time.time()
+        latency_ms = int((end_time - start_time) * 1000)
+        
+        # Return error response
+        return {
+            "response_text": f"Error: Agent pipeline failed - {str(e)}",
+            "confidence_score": 0.0,
+            "refusal_flag": False,
+            "refusal_reason": None,
+            "citations": [],
+            "repair_count": 0,
+            "latency_ms": latency_ms,
+            "agent_trace": {
+                "error": str(e)
+            }
+        }

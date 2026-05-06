@@ -34,6 +34,9 @@ dist/
 .idea/
 .vscode/
 
+# Data files (SEC filings are large and should not be committed)
+data/
+
 # Others
 .kiro/
 SPEC.md

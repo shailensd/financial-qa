@@ -17,11 +17,14 @@ from app.config import settings
 database_url = settings.database_url
 if database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+elif database_url.startswith("sqlite"):
+    # SQLite for development/testing
+    pass
 elif not database_url.startswith("postgresql+asyncpg://"):
-    # Ensure we're using asyncpg driver
+    # Ensure we're using asyncpg driver for PostgreSQL
     if "://" in database_url:
         raise ValueError(
-            f"Unsupported database URL scheme. Expected postgresql:// or postgresql+asyncpg://, "
+            f"Unsupported database URL scheme. Expected postgresql://, postgresql+asyncpg://, or sqlite+aiosqlite://, "
             f"got: {database_url.split('://')[0]}://"
         )
 
@@ -30,6 +33,7 @@ engine = create_async_engine(
     echo=False,  # Set to True for SQL query logging during development
     future=True,
     pool_pre_ping=True,  # Verify connections before using them
+    connect_args={"check_same_thread": False} if database_url.startswith("sqlite") else {},
 )
 
 # Create async session factory

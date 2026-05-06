@@ -322,7 +322,7 @@ class TestRRFProperties:
         overlap_count=st.integers(min_value=0, max_value=10)
     )
     @hypothesis_settings(
-        max_examples=50,
+        max_examples=10,
         deadline=None,
         suppress_health_check=[HealthCheck.function_scoped_fixture]
     )

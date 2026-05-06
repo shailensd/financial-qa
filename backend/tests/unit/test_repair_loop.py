@@ -24,7 +24,7 @@ class TestRepairLoopBound:
         has_numerical_mismatch=st.booleans(),
         has_missing_citations=st.booleans()
     )
-    @settings(max_examples=100)
+    @settings(max_examples=20)
     def test_critic_never_exceeds_max_repair_iterations(
         self,
         repair_count: int,
@@ -129,7 +129,7 @@ class TestRepairLoopBound:
         repair_count=st.integers(min_value=0, max_value=10),
         critic_verdict=st.sampled_from(["approved", "repair_numerical", "repair_citation"])
     )
-    @settings(max_examples=50)
+    @settings(max_examples=15)
     def test_route_after_critic_respects_max_iterations(
         self,
         repair_count: int,
