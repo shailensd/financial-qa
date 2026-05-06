@@ -1,7 +1,10 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TypedDict, Optional
+
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
 
 from app.ml.hybrid_retrieval import HybridRetriever
 from app.ml.llm_router import LLMRouter
@@ -9,6 +12,51 @@ from app.agent.tools import get_available_tools
 
 
 logger = logging.getLogger(__name__)
+
+
+# AgentState TypedDict with all fields from design document
+class AgentState(TypedDict, total=False):
+    """
+    LangGraph state for the Planner-Executor-Critic agent pipeline.
+    
+    All fields are optional (total=False) to allow incremental state updates.
+    """
+    # Input fields
+    query: str
+    session_id: str
+    model_used: str
+    company: Optional[str]
+    
+    # Configuration fields
+    ollama_base_url: str
+    gemini_api_key: str
+    
+    # Planner fields
+    plan: List[Dict[str, Any]]
+    
+    # Executor fields
+    tool_results: List[Dict[str, Any]]
+    draft_response: str
+    citations: List[Dict[str, Any]]
+    
+    # Critic fields
+    critic_verdict: str  # "approved" | "repair_numerical" | "repair_citation"
+    critic_feedback: Optional[str]
+    confidence_score: float
+    
+    # Repair loop fields
+    repair_count: int
+    
+    # RefusalGuard fields
+    refusal: bool
+    refusal_reason: Optional[str]
+    
+    # Memory fields
+    memory_context: str
+    turn_count: int
+    
+    # Performance tracking
+    latency_ms: int
 
 
 # RefusalGuard keyword lists
@@ -510,6 +558,7 @@ def critic_node(state: dict) -> dict:
         return {
             "critic_verdict": "repair_numerical",
             "confidence_score": 0.0,
+            "repair_count": repair_count + 1,  # Increment repair count
             "critic_feedback": (
                 f"The following numbers in your response do not appear in the cited chunks: "
                 f"{', '.join(numerical_mismatches)}. Please verify all numerical claims "
@@ -539,6 +588,7 @@ def critic_node(state: dict) -> dict:
         return {
             "critic_verdict": "repair_citation",
             "confidence_score": 0.0,
+            "repair_count": repair_count + 1,  # Increment repair count
             "critic_feedback": (
                 "Your response lacks proper citations. Please ensure every factual claim "
                 "is grounded in the retrieved source documents and include appropriate citations."
@@ -556,6 +606,7 @@ def critic_node(state: dict) -> dict:
             "critic_verdict": "approved",
             "confidence_score": 0.3,
             "critic_feedback": None
+            # Note: Do not return repair_count here - it should not be incremented
         }
     
     # Step 5: All checks passed - approve with confidence score
@@ -623,3 +674,245 @@ class PlannerExecutorCriticPipeline:
             "execution": execution_output,
             "critic": critic_output,
         }
+
+
+def memory_retrieve_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Memory retrieval node: fetches session context for Planner.
+    
+    Retrieves the most recent memory summary and last 2 raw turns from the database,
+    concatenates them into memory_context string for injection into Planner prompt.
+    
+    Args:
+        state: Agent state dict containing:
+            - session_id: str - Session identifier
+            - db: Session - Database session (optional, for now returns placeholder)
+    
+    Returns:
+        dict with:
+            - memory_context: str - Formatted memory context for Planner
+    """
+    session_id = state.get("session_id", "")
+    
+    # TODO: Implement actual database retrieval when memory system is ready
+    # For now, return placeholder context
+    logger.info(f"Memory retrieve for session {session_id} (placeholder)")
+    
+    return {
+        "memory_context": f"[Session {session_id}]\nNo prior context available."
+    }
+
+
+def memory_write_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Memory write node: persists turn to memory_summaries table.
+    
+    Extracts key entities from query and response, writes raw turn to database
+    for future retrieval and summarization.
+    
+    Args:
+        state: Agent state dict containing:
+            - session_id: str - Session identifier
+            - query: str - User query
+            - draft_response: str - Generated response
+            - turn_count: int - Current turn number (optional)
+            - db: Session - Database session (optional, for now logs only)
+    
+    Returns:
+        dict with:
+            - turn_count: int - Incremented turn count
+    """
+    session_id = state.get("session_id", "")
+    query = state.get("query", "")
+    draft_response = state.get("draft_response", "")
+    turn_count = state.get("turn_count", 0) + 1
+    
+    # TODO: Implement actual database write when memory system is ready
+    logger.info(
+        f"Memory write for session {session_id}, turn {turn_count}: "
+        f"query={query[:50]}..., response={draft_response[:50]}..."
+    )
+    
+    return {
+        "turn_count": turn_count
+    }
+
+
+def memory_summarizer_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Memory summarizer node: compresses last 5 turns into 150-word summary.
+    
+    Fetches last 5 raw turns from database, calls LLM to compress into summary,
+    writes compressed summary back to memory_summaries table.
+    
+    Triggers only when turn_count % 5 == 0.
+    
+    Args:
+        state: Agent state dict containing:
+            - session_id: str - Session identifier
+            - turn_count: int - Current turn number
+            - model_used: str - LLM model to use
+            - db: Session - Database session (optional, for now logs only)
+    
+    Returns:
+        dict (empty, no state updates needed)
+    """
+    session_id = state.get("session_id", "")
+    turn_count = state.get("turn_count", 0)
+    model_used = state.get("model_used", "gemini")
+    
+    # TODO: Implement actual summarization when memory system is ready
+    logger.info(
+        f"Memory summarizer triggered for session {session_id} at turn {turn_count} "
+        f"(placeholder - would compress last 5 turns with {model_used})"
+    )
+    
+    return {}
+
+
+def route_after_refusal(state: AgentState) -> str:
+    """
+    Conditional routing after RefusalGuard.
+    
+    Returns:
+        "end" if query was refused, "memory_retrieve" if allowed
+    """
+    if state.get("refusal", False):
+        return "end"
+    return "memory_retrieve"
+
+
+def route_after_critic(state: AgentState) -> str:
+    """
+    Conditional routing after Critic node.
+    
+    Routes back to Planner for repair if:
+    - critic_verdict is "repair_numerical" or "repair_citation"
+    - AND repair_count < 2
+    
+    Otherwise routes to memory_write.
+    
+    Returns:
+        "planner" for repair loop, "memory_write" to proceed
+    """
+    critic_verdict = state.get("critic_verdict", "approved")
+    repair_count = state.get("repair_count", 0)
+    
+    # Check if repair is needed and allowed
+    needs_repair = critic_verdict in ["repair_numerical", "repair_citation"]
+    can_repair = repair_count < 2
+    
+    if needs_repair and can_repair:
+        logger.info(f"Routing to planner for repair (count={repair_count}, verdict={critic_verdict})")
+        return "planner"
+    
+    logger.info(f"Routing to memory_write (verdict={critic_verdict}, repair_count={repair_count})")
+    return "memory_write"
+
+
+def route_after_memory_write(state: AgentState) -> str:
+    """
+    Conditional routing after memory_write.
+    
+    Routes to memory_summarizer if turn_count % 5 == 0, otherwise to END.
+    
+    Returns:
+        "memory_summarizer" if summarization needed, "end" otherwise
+    """
+    turn_count = state.get("turn_count", 0)
+    
+    if turn_count % 5 == 0:
+        logger.info(f"Routing to memory_summarizer (turn_count={turn_count})")
+        return "memory_summarizer"
+    
+    return "end"
+
+
+def increment_repair_count(state: AgentState) -> Dict[str, Any]:
+    """
+    Helper to increment repair_count when routing back to planner.
+    
+    This is called as part of the repair loop to track iterations.
+    """
+    repair_count = state.get("repair_count", 0)
+    return {"repair_count": repair_count + 1}
+
+
+def build_agent_graph() -> StateGraph:
+    """
+    Build the complete LangGraph StateGraph for Planner-Executor-Critic pipeline.
+    
+    Graph structure:
+        START → refusal_guard → (memory_retrieve | END)
+        memory_retrieve → planner → executor → critic
+        critic → (planner [repair loop] | memory_write)
+        memory_write → (memory_summarizer | END)
+        memory_summarizer → END
+    
+    Returns:
+        Compiled StateGraph ready for execution
+    """
+    # Create StateGraph with AgentState
+    graph = StateGraph(AgentState)
+    
+    # Add all nodes
+    graph.add_node("refusal_guard", refusal_guard_node)
+    graph.add_node("memory_retrieve", memory_retrieve_node)
+    graph.add_node("planner", planner_node)
+    graph.add_node("executor", executor_node)
+    graph.add_node("critic", critic_node)
+    graph.add_node("memory_write", memory_write_node)
+    graph.add_node("memory_summarizer", memory_summarizer_node)
+    
+    # Add edges from START
+    graph.add_edge(START, "refusal_guard")
+    
+    # Add conditional edge after refusal_guard
+    graph.add_conditional_edges(
+        "refusal_guard",
+        route_after_refusal,
+        {
+            "memory_retrieve": "memory_retrieve",
+            "end": END
+        }
+    )
+    
+    # Add linear edges through main pipeline
+    graph.add_edge("memory_retrieve", "planner")
+    graph.add_edge("planner", "executor")
+    graph.add_edge("executor", "critic")
+    
+    # Add conditional edge after critic (repair loop)
+    graph.add_conditional_edges(
+        "critic",
+        route_after_critic,
+        {
+            "planner": "planner",  # Repair loop back to planner
+            "memory_write": "memory_write"
+        }
+    )
+    
+    # Add conditional edge after memory_write (summarization trigger)
+    graph.add_conditional_edges(
+        "memory_write",
+        route_after_memory_write,
+        {
+            "memory_summarizer": "memory_summarizer",
+            "end": END
+        }
+    )
+    
+    # Add edge from memory_summarizer to END
+    graph.add_edge("memory_summarizer", END)
+    
+    # Configure checkpointer for session continuity
+    # Using MemorySaver for persistence (in-memory checkpointing)
+    # Note: For production, consider using a persistent checkpointer
+    checkpointer = MemorySaver()
+    
+    # Compile the graph
+    compiled_graph = graph.compile(checkpointer=checkpointer)
+    
+    logger.info("Agent graph built and compiled successfully")
+    
+    return compiled_graph
