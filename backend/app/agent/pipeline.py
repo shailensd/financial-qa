@@ -356,14 +356,18 @@ def executor_node(state: dict) -> dict:
     all_chunk_texts = []
     all_chunk_ids = []
     
+    # Build context for CALCULATE tool from previous tool results
+    # This allows CALCULATE to reference variables extracted from LOOKUP/COMPARE
+    calculate_context = {}
+    
     for tool_call in plan:
         tool_name = tool_call.get("tool")
         tool_inputs = tool_call.get("inputs", {})
         
         try:
-            # Execute tool
+            # Execute tool (pass context for CALCULATE)
             from app.agent.tools import execute_tool
-            result = execute_tool(tool_name, tool_inputs, retriever)
+            result = execute_tool(tool_name, tool_inputs, retriever, context=calculate_context)
             
             # Log successful execution
             logger.info(
@@ -387,6 +391,58 @@ def executor_node(state: dict) -> dict:
                     all_chunk_texts.append(chunk_text)
                 if chunk_id:
                     all_chunk_ids.append(chunk_id)
+                
+                # Extract numbers from chunk text for CALCULATE context
+                # Look for numbers in format: $123.45, 123.45, 123,456.78, etc.
+                import re
+                number_pattern = r'\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)'
+                numbers = re.findall(number_pattern, chunk_text)
+                
+                # Add ALL numbers to context with various naming patterns
+                # This allows CALCULATE to reference them flexibly
+                if numbers:
+                    parsed_numbers = [float(n.replace(',', '')) for n in numbers]
+                    largest_number = max(parsed_numbers)
+                    
+                    # Create variable name from entity/attribute in inputs
+                    entity = tool_inputs.get("entity", "").lower().replace(" ", "_")
+                    attribute = tool_inputs.get("attribute", "").lower().replace(" ", "_")
+                    
+                    # Add with multiple naming patterns to maximize LLM compatibility
+                    # Pattern 1: entity_attribute (e.g., apple_revenue_2023)
+                    var_name = f"{entity}_{attribute}".replace("__", "_").strip("_")
+                    if var_name:
+                        calculate_context[var_name] = largest_number
+                    
+                    # Pattern 2: Just attribute (e.g., revenue_2023, revenue)
+                    if attribute:
+                        calculate_context[attribute] = largest_number
+                        # Also add without year suffix if present
+                        attr_no_year = re.sub(r'_\d{4}$', '', attribute)
+                        if attr_no_year != attribute:
+                            calculate_context[attr_no_year] = largest_number
+                    
+                    # Pattern 3: Common financial terms
+                    if "revenue" in attribute or "sales" in attribute:
+                        calculate_context["revenue"] = largest_number
+                        calculate_context["total_revenue"] = largest_number
+                        # Extract year from attribute if present
+                        year_match = re.search(r'(\d{4})', attribute)
+                        if year_match:
+                            year = year_match.group(1)
+                            calculate_context[f"revenue_{year}"] = largest_number
+                    
+                    if "net_income" in attribute or "profit" in attribute or "income" in attribute:
+                        calculate_context["net_income"] = largest_number
+                        calculate_context["income"] = largest_number
+                    
+                    if "eps" in attribute or "earnings_per_share" in attribute:
+                        calculate_context["eps"] = largest_number
+                    
+                    if "margin" in attribute:
+                        calculate_context["margin"] = largest_number
+                    
+                    logger.info(f"Added to CALCULATE context: {list(calculate_context.keys())}")
             
             elif tool_name == "COMPARE":
                 comparison_result = result.get("comparison_result", {})
@@ -398,12 +454,32 @@ def executor_node(state: dict) -> dict:
                 if entity1.get("chunk_id"):
                     all_chunk_ids.append(entity1["chunk_id"])
                 
+                # Add entity1 value to context
+                if entity1.get("value") is not None:
+                    entity_name = entity1.get("entity", "").lower().replace(" ", "_")
+                    period = entity1.get("period", "").lower().replace(" ", "_")
+                    var_name = f"{entity_name}_{period}".replace("__", "_").strip("_")
+                    if var_name:
+                        calculate_context[var_name] = entity1["value"]
+                
                 # Extract from entity2
                 entity2 = comparison_result.get("entity2", {})
                 if entity2.get("chunk_text"):
                     all_chunk_texts.append(entity2["chunk_text"])
                 if entity2.get("chunk_id"):
                     all_chunk_ids.append(entity2["chunk_id"])
+                
+                # Add entity2 value to context
+                if entity2.get("value") is not None:
+                    entity_name = entity2.get("entity", "").lower().replace(" ", "_")
+                    period = entity2.get("period", "").lower().replace(" ", "_")
+                    var_name = f"{entity_name}_{period}".replace("__", "_").strip("_")
+                    if var_name:
+                        calculate_context[var_name] = entity2["value"]
+                
+                # Add delta to context
+                if comparison_result.get("delta") is not None:
+                    calculate_context["delta"] = comparison_result["delta"]
         
         except Exception as e:
             # Log error but continue with remaining tools

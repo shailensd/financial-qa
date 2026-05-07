@@ -153,15 +153,19 @@ def get_available_tools(query: str) -> List[str]:
     return available_tools
 
 
-def _execute_calculate(inputs: Dict[str, Any]) -> Dict[str, Any]:
+def _execute_calculate(inputs: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Execute CALCULATE tool: evaluate mathematical expression safely.
     
     Uses Python eval() with a restricted namespace containing only math operations.
     No builtins are available to prevent code injection.
     
+    Can optionally accept a context dictionary containing variables extracted from
+    previous tool results (e.g., numbers from LOOKUP results).
+    
     Args:
         inputs: Dictionary with 'expression' key
+        context: Optional dictionary of variables to make available in the expression
     
     Returns:
         Dictionary with 'result' key containing float result
@@ -185,9 +189,19 @@ def _execute_calculate(inputs: Dict[str, Any]) -> Dict[str, Any]:
         # Allow basic arithmetic operators (handled by Python syntax)
     }
     
+    # Create local namespace with context variables (if provided)
+    local_namespace = {}
+    if context:
+        # Only allow numeric values in context to prevent code injection
+        for key, value in context.items():
+            if isinstance(value, (int, float)):
+                local_namespace[key] = value
+            else:
+                logger.warning(f"Skipping non-numeric context variable: {key}={value}")
+    
     try:
-        # Evaluate expression in safe namespace
-        result = eval(expression, safe_namespace, {})
+        # Evaluate expression in safe namespace with context variables
+        result = eval(expression, safe_namespace, local_namespace)
         
         # Convert result to float
         result_float = float(result)
@@ -346,7 +360,8 @@ def execute_tool(
     tool_name: str,
     inputs: Dict[str, Any],
     retriever: HybridRetriever,
-    db: Optional[AsyncSession] = None
+    db: Optional[AsyncSession] = None,
+    context: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Dispatcher function to execute a tool by name.
@@ -359,6 +374,7 @@ def execute_tool(
         inputs: Dictionary of input parameters
         retriever: HybridRetriever instance for LOOKUP and COMPARE
         db: Database session (optional)
+        context: Optional context dictionary for CALCULATE (variables from previous tools)
     
     Returns:
         Dictionary containing tool execution results
@@ -376,7 +392,7 @@ def execute_tool(
     # Execute appropriate tool
     try:
         if tool_name == "CALCULATE":
-            return _execute_calculate(inputs)
+            return _execute_calculate(inputs, context)
         
         elif tool_name == "LOOKUP":
             return _execute_lookup(inputs, retriever, db)

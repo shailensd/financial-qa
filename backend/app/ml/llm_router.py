@@ -28,7 +28,7 @@ class LLMRouter:
     MODELS = {
         "llama": "ollama/llama3.2:3b",
         "gemma": "ollama/gemma2:9b",
-        "gemini": "gemini/gemini-2.0-flash"
+        "gemini": "gemini/gemini-2.5-flash"
     }
     
     def __init__(self, ollama_base_url: str = "http://localhost:11434", gemini_api_key: Optional[str] = None):
