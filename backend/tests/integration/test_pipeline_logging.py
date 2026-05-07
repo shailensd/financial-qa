@@ -72,6 +72,7 @@ class TestPipelineLogging:
                         session_id="test_session",
                         model_used="gemini",
                         db=mock_db,
+                        retriever=MagicMock(),
                         gemini_api_key="test_key"
                     )
                     
@@ -151,6 +152,7 @@ class TestPipelineLogging:
                         session_id="test_session",
                         model_used="gemini",
                         db=mock_db,
+                        retriever=MagicMock(),
                         gemini_api_key="test_key"
                     )
                     
@@ -182,6 +184,7 @@ class TestPipelineLogging:
                 session_id="test_session",
                 model_used="gemini",
                 db=mock_db,
+                retriever=MagicMock(),
                 gemini_api_key="test_key"
             )
             

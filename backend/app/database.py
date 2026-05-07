@@ -14,7 +14,7 @@ from app.config import settings
 
 # Create async engine
 # Convert postgresql:// to postgresql+asyncpg:// if needed
-database_url = settings.database_url
+database_url = settings.database_url if settings else "sqlite+aiosqlite:///:memory:"
 if database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 elif database_url.startswith("sqlite"):

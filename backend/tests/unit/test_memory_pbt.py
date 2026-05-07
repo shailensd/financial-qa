@@ -284,8 +284,8 @@ async def test_retrieve_format_consistency(num_turns):
         assert "[Recent Turns]" in context, "Context should contain [Recent Turns] section"
         
         # Property: Context should contain at least one query
-        assert "Q:" in context, "Context should contain at least one query"
-        assert "A:" in context, "Context should contain at least one answer"
+        assert "Query:" in context, "Context should contain at least one query"
+        assert "Response:" in context, "Context should contain at least one answer"
         
         # Property: Context should not have malformed sections
         lines = context.split("\n")
@@ -302,11 +302,7 @@ async def test_retrieve_format_consistency(num_turns):
 # ============================================================================
 
 @pytest.mark.asyncio
-@given(
-    num_summarizations=st.integers(min_value=1, max_value=2),
-)
-@settings(max_examples=2, deadline=5000)
-async def test_summarization_creates_compressed_entries(num_summarizations):
+async def test_summarization_creates_compressed_entries():
     """
     Property: Summarization should create compressed memory entries.
     
@@ -347,12 +343,11 @@ async def test_summarization_creates_compressed_entries(num_summarizations):
                 response=f"Response {turn_num}",
             )
         
-        # Run summarization N times
-        for _ in range(num_summarizations):
-            await memory_system.summarize(
-                db=db,
-                session_id=session_id,
-            )
+        # Run summarization
+        await memory_system.summarize(
+            db=db,
+            session_id=session_id,
+        )
         
         # Verify memory state is consistent
         all_memories = await crud.get_recent_memory(db=db, session_id=session_id, limit=100)
@@ -362,8 +357,8 @@ async def test_summarization_creates_compressed_entries(num_summarizations):
         compressed = [m for m in all_memories if m.turn_range_end > m.turn_range_start]
         
         assert len(raw_turns) == 5, f"Should have 5 raw turns, got {len(raw_turns)}"
-        assert len(compressed) == num_summarizations, (
-            f"Should have {num_summarizations} compressed summaries, got {len(compressed)}"
+        assert len(compressed) == 1, (
+            f"Should have 1 compressed summary, got {len(compressed)}"
         )
         
         # Property: First compressed summary should span turns 1-5

@@ -12,6 +12,7 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.main import app
 from app.database import Base, get_db
@@ -80,6 +81,15 @@ async def client(test_db):
     
     # Copy routes from main app
     app_for_test.router = app.router
+    
+    # Add CORS middleware to match main app
+    app_for_test.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     
     # Override dependency
     app_for_test.dependency_overrides[get_db] = override_get_db
@@ -497,7 +507,10 @@ async def test_cors_headers(client, test_db):
     """Test CORS middleware adds appropriate headers."""
     response = await client.options(
         "/health",
-        headers={"Origin": "http://localhost:3000"}
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET"
+        }
     )
     
     # CORS headers should be present
