@@ -37,6 +37,10 @@ dist/
 # Data files (SEC filings are large and should not be committed)
 data/
 
+# ChromaDB database files (large binary files)
+chroma_db/
+*.sqlite3
+
 # Others
 .kiro/
 SPEC.md
