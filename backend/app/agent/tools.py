@@ -8,7 +8,6 @@ and execution logic for CALCULATE, LOOKUP, and COMPARE tools.
 import re
 import logging
 from typing import Any, Dict, List, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ml.hybrid_retrieval import HybridRetriever
 
@@ -216,7 +215,7 @@ def _execute_calculate(inputs: Dict[str, Any], context: Optional[Dict[str, Any]]
 def _execute_lookup(
     inputs: Dict[str, Any],
     retriever: HybridRetriever,
-    db: Optional[AsyncSession] = None
+    db: Optional[Any] = None
 ) -> Dict[str, Any]:
     """
     Execute LOOKUP tool: retrieve relevant chunk for entity/attribute query.
@@ -262,7 +261,7 @@ def _execute_lookup(
 def _execute_compare(
     inputs: Dict[str, Any],
     retriever: HybridRetriever,
-    db: Optional[AsyncSession] = None
+    db: Optional[Any] = None
 ) -> Dict[str, Any]:
     """
     Execute COMPARE tool: compare two entities/periods.
@@ -360,7 +359,7 @@ def execute_tool(
     tool_name: str,
     inputs: Dict[str, Any],
     retriever: HybridRetriever,
-    db: Optional[AsyncSession] = None,
+    db: Optional[Any] = None,
     context: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """

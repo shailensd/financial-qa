@@ -15,6 +15,9 @@ def test_config_raises_error_for_missing_database_url(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     
+    # Prevent loading from .env file
+    monkeypatch.setattr("app.config.Settings.Config.env_file", None)
+    
     # Set only gemini_api_key to isolate database_url validation
     monkeypatch.setenv("GEMINI_API_KEY", "test_key")
     
@@ -22,7 +25,7 @@ def test_config_raises_error_for_missing_database_url(monkeypatch):
     from app.config import Settings
     
     with pytest.raises(ValidationError) as exc_info:
-        Settings()
+        Settings(_env_file=None)
     
     # Verify the error mentions database_url
     error_str = str(exc_info.value)
@@ -35,13 +38,16 @@ def test_config_raises_error_for_missing_gemini_api_key(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     
+    # Prevent loading from .env file
+    monkeypatch.setattr("app.config.Settings.Config.env_file", None)
+    
     # Set only database_url to isolate gemini_api_key validation
     monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost/test")
     
     from app.config import Settings
     
     with pytest.raises(ValidationError) as exc_info:
-        Settings()
+        Settings(_env_file=None)
     
     # Verify the error mentions gemini_api_key
     error_str = str(exc_info.value)
@@ -112,14 +118,25 @@ def test_config_succeeds_with_valid_required_fields(monkeypatch):
 
 def test_config_raises_error_for_both_missing_fields(monkeypatch):
     """Test that Settings raises ValidationError when both required fields are missing."""
+    # Clear any existing environment variables
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     
-    from app.config import Settings
-    
-    with pytest.raises(ValidationError) as exc_info:
-        Settings()
-    
-    # Both fields should be mentioned in the error
-    error_str = str(exc_info.value)
-    assert "database_url" in error_str.lower() or "gemini_api_key" in error_str.lower()
+    # Change working directory to prevent loading .env file
+    import tempfile
+    import os
+    with tempfile.TemporaryDirectory() as tmpdir:
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmpdir)
+            
+            from app.config import Settings
+            
+            with pytest.raises(ValidationError) as exc_info:
+                Settings()
+            
+            # Verify the error mentions at least one of the required fields
+            error_str = str(exc_info.value).lower()
+            assert "database_url" in error_str or "gemini_api_key" in error_str
+        finally:
+            os.chdir(original_cwd)

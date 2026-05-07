@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.database import get_db, engine, Base
+from app.database import get_db, engine, Base, SessionLocal
 from app.ml.hybrid_retrieval import HybridRetriever
 from app.agent.pipeline import run_agent_pipeline
 from app import crud
@@ -58,7 +58,6 @@ async def lifespan(app: FastAPI):
     # Initialize hybrid retriever with BM25 index
     global hybrid_retriever
     try:
-        from app.database import SessionLocal
         hybrid_retriever = HybridRetriever(db_session_factory=SessionLocal)
         await hybrid_retriever.build_bm25_index()
         logger.info("Hybrid retriever initialized with BM25 index")
@@ -323,6 +322,7 @@ async def query_endpoint(
                 model_used=model,
                 db=db,
                 retriever=hybrid_retriever,
+                db_session_factory=SessionLocal,
                 ollama_base_url=settings.ollama_base_url,
                 gemini_api_key=settings.gemini_api_key,
                 company=request.company,

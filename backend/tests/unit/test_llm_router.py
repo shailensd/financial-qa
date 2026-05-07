@@ -55,7 +55,7 @@ class TestModelMapping:
     
     def test_gemini_model_mapping(self, router):
         """Test that 'gemini' maps to correct Gemini model."""
-        assert router.MODELS["gemini"] == "gemini/gemini-2.0-flash"
+        assert router.MODELS["gemini"] == "gemini/gemini-2.5-flash"
     
     def test_unknown_model_raises_error(self, router, sample_messages):
         """Test that unknown model name raises ValueError."""
@@ -256,7 +256,7 @@ class TestSequentialExecution:
         calls = mock_completion.call_args_list
         assert calls[0][1]["model"] == "ollama/llama3.2:3b"
         assert calls[1][1]["model"] == "ollama/gemma2:9b"
-        assert calls[2][1]["model"] == "gemini/gemini-2.0-flash"
+        assert calls[2][1]["model"] == "gemini/gemini-2.5-flash"
 
 
 class TestInitialization:

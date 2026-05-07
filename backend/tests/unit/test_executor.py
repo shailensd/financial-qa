@@ -15,6 +15,7 @@ from unittest.mock import Mock, patch, MagicMock
 
 from app.agent.pipeline import executor_node
 from app.ml.hybrid_retrieval import ScoredChunk
+import app.agent.pipeline
 
 
 class TestExecutorNode:
@@ -22,11 +23,14 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_executes_all_tools_in_plan(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool
+        self, mock_llm_router_class, mock_execute_tool
     ):
         """Executor should iterate through plan and execute each tool."""
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
+        
         # Setup mocks
         mock_llm_router = Mock()
         mock_llm_router.complete.return_value = "Draft response text"
@@ -63,11 +67,14 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_collects_tool_results(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool
+        self, mock_llm_router_class, mock_execute_tool
     ):
         """Executor should collect all tool results into state."""
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
+        
         mock_llm_router = Mock()
         mock_llm_router.complete.return_value = "Draft response"
         mock_llm_router_class.return_value = mock_llm_router
@@ -93,11 +100,14 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_generates_draft_response(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool
+        self, mock_llm_router_class, mock_execute_tool
     ):
         """Executor should generate draft response using LLM."""
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
+        
         mock_llm_router = Mock()
         expected_response = "Apple's revenue in FY2023 was $383.3 billion."
         mock_llm_router.complete.return_value = expected_response
@@ -136,11 +146,14 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_populates_citations_from_lookup(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool
+        self, mock_llm_router_class, mock_execute_tool
     ):
         """Executor should populate citations from LOOKUP tool chunk_ids."""
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
+        
         mock_llm_router = Mock()
         mock_llm_router.complete.return_value = "Draft response"
         mock_llm_router_class.return_value = mock_llm_router
@@ -167,11 +180,14 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_populates_citations_from_compare(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool
+        self, mock_llm_router_class, mock_execute_tool
     ):
         """Executor should populate citations from COMPARE tool chunk_ids."""
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
+        
         mock_llm_router = Mock()
         mock_llm_router.complete.return_value = "Draft response"
         mock_llm_router_class.return_value = mock_llm_router
@@ -213,11 +229,14 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_continues_on_tool_error(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool
+        self, mock_llm_router_class, mock_execute_tool
     ):
         """Executor should log error and continue with remaining tools on tool failure."""
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
+        
         mock_llm_router = Mock()
         mock_llm_router.complete.return_value = "Draft response"
         mock_llm_router_class.return_value = mock_llm_router
@@ -255,11 +274,14 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_handles_empty_plan(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool
+        self, mock_llm_router_class, mock_execute_tool
     ):
         """Executor should handle empty plan gracefully."""
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
+        
         mock_llm_router = Mock()
         mock_llm_router.complete.return_value = "Draft response with no tools"
         mock_llm_router_class.return_value = mock_llm_router
@@ -278,11 +300,14 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_handles_llm_error(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool
+        self, mock_llm_router_class, mock_execute_tool
     ):
         """Executor should handle LLM error gracefully."""
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
+        
         mock_llm_router = Mock()
         mock_llm_router.complete.side_effect = Exception("LLM API error")
         mock_llm_router_class.return_value = mock_llm_router
@@ -311,11 +336,14 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_includes_chunk_texts_in_prompt(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool
+        self, mock_llm_router_class, mock_execute_tool
     ):
         """Executor should include retrieved chunk texts in generation prompt."""
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
+        
         mock_llm_router = Mock()
         mock_llm_router.complete.return_value = "Draft response"
         mock_llm_router_class.return_value = mock_llm_router
@@ -345,11 +373,14 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_includes_tool_results_in_prompt(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool
+        self, mock_llm_router_class, mock_execute_tool
     ):
         """Executor should include tool results in generation prompt."""
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
+        
         mock_llm_router = Mock()
         mock_llm_router.complete.return_value = "Draft response"
         mock_llm_router_class.return_value = mock_llm_router
@@ -377,11 +408,14 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_uses_correct_model(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool
+        self, mock_llm_router_class, mock_execute_tool
     ):
         """Executor should use the model specified in state."""
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
+        
         mock_llm_router = Mock()
         mock_llm_router.complete.return_value = "Draft response"
         mock_llm_router_class.return_value = mock_llm_router
@@ -409,13 +443,16 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_logs_tool_executions(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool, caplog
+        self, mock_llm_router_class, mock_execute_tool, caplog
     ):
         """Executor should log each tool execution."""
         import logging
         caplog.set_level(logging.INFO)
+        
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
         
         mock_llm_router = Mock()
         mock_llm_router.complete.return_value = "Draft response"
@@ -441,13 +478,16 @@ class TestExecutorNode:
     
     @patch('app.agent.tools.execute_tool')
     @patch('app.agent.pipeline.LLMRouter')
-    @patch('app.agent.pipeline.HybridRetriever')
     def test_executor_logs_tool_errors(
-        self, mock_retriever_class, mock_llm_router_class, mock_execute_tool, caplog
+        self, mock_llm_router_class, mock_execute_tool, caplog
     ):
         """Executor should log tool execution errors."""
         import logging
         caplog.set_level(logging.ERROR)
+        
+        # Setup mock retriever in global scope
+        mock_retriever = Mock()
+        app.agent.pipeline._current_retriever = mock_retriever
         
         mock_llm_router = Mock()
         mock_llm_router.complete.return_value = "Draft response"

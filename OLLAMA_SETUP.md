@@ -259,7 +259,7 @@ ollama serve
 The backend maps friendly names to Ollama model names:
 - `"llama"` → `"ollama/llama3.2:3b"`
 - `"gemma"` → `"ollama/gemma2:9b"`
-- `"gemini"` → `"gemini/gemini-2.0-flash"`
+- `"gemini"` → `"gemini/gemini-2.5-flash"`
 
 Make sure you pulled the exact model versions:
 ```bash
@@ -286,7 +286,7 @@ To use these, you'll need to modify `backend/app/ml/llm_router.py`:
 MODELS = {
     "llama": "ollama/llama3.2:1b",  # Change to your preferred version
     "gemma": "ollama/gemma2:2b",    # Change to your preferred version
-    "gemini": "gemini/gemini-2.0-flash"
+    "gemini": "gemini/gemini-2.5-flash"
 }
 ```
 

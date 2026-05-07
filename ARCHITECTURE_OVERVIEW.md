@@ -59,7 +59,7 @@
 │  │    ├─> Retrieval (Hybrid: BM25 + ChromaDB)             │       │
 │  │    └─> LLM Call via LiteLLM                             │       │
 │  │         └─> Google AI Studio API                        │       │
-│  │              └─> gemini-2.0-flash model                 │       │
+│  │              └─> gemini-2.5-flash model                 │       │
 │  │    Result: {response, confidence: 0.98, latency: 2s}   │       │
 │  └─────────────────────────────────────────────────────────┘       │
 │                              │                                       │
@@ -142,7 +142,7 @@ FastAPI Backend
     ▼
 LiteLLM Router
     │
-    └─> Model: "gemini" → "gemini/gemini-2.0-flash"
+    └─> Model: "gemini" → "gemini/gemini-2.5-flash"
         │
         ▼
         Google AI Studio API (HTTPS)

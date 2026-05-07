@@ -9,6 +9,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from app.ml.hybrid_retrieval import HybridRetriever
 from app.ml.llm_router import LLMRouter
 from app.agent.tools import get_available_tools
+from app.agent.memory import MemorySystem
 
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,13 @@ class AgentState(TypedDict, total=False):
     
     # Performance tracking
     latency_ms: int
+
+
+# Module-level globals for objects that cannot be put in LangGraph state
+# (MemorySaver uses msgpack which cannot serialize SQLAlchemy sessions or
+# HybridRetriever instances).
+_current_retriever: Optional[HybridRetriever] = None
+_current_db_factory = None  # async session factory set by run_agent_pipeline
 
 
 # RefusalGuard keyword lists
@@ -558,8 +566,8 @@ Please provide a comprehensive answer to the query based on the tool results and
         logger.info(f"Draft response generated successfully (length: {len(draft_response)})")
     
     except Exception as e:
-        logger.error(f"Failed to generate draft response: {e}")
-        draft_response = "Error: Failed to generate response due to LLM error."
+        logger.error(f"Failed to generate draft response: {e}", exc_info=True)
+        draft_response = f"Error: Failed to generate response due to LLM error: {type(e).__name__} - {str(e)}"
     
     # Populate citations from chunk_ids
     # Each chunk_id gets a citation with relevance score
@@ -747,139 +755,104 @@ def critic_node(state: dict) -> dict:
     }
 
 
-class PlannerExecutorCriticPipeline:
-    """Checkpoint skeleton of Planner-Executor-Critic architecture."""
-
-    def __init__(self) -> None:
-        self.retriever = HybridRetriever()
-
-    def plan(self, question: str) -> list[str]:
-        return [
-            "Check refusal policy",
-            "Retrieve evidence chunks",
-            "Generate draft answer",
-            "Critic verifies grounding",
-        ]
-
-    def execute(self, question: str, company: str) -> dict:
-        chunks = self.retriever.retrieve(question=question, company=company, top_k=5)
-        return {
-            "tool_calls": [
-                {"tool": "hybrid_retrieval", "status": "ok", "result_count": len(chunks)}
-            ],
-            "chunks": chunks,
-        }
-
-    def critic(self, execution_output: dict) -> dict:
-        return {
-            "grounding_check": "pending-full-implementation",
-            "passed": True,
-            "comments": "Checkpoint stub only; citation verification will be added next.",
-            "tool_calls_logged": execution_output.get("tool_calls", []),
-        }
-
-    def run(self, question: str, company: str) -> dict:
-        plan_steps = self.plan(question)
-        execution_output = self.execute(question=question, company=company)
-        critic_output = self.critic(execution_output)
-        return {
-            "plan": plan_steps,
-            "execution": execution_output,
-            "critic": critic_output,
-        }
+# PlannerExecutorCriticPipeline (old checkpoint skeleton) removed.
+# The live implementation is the LangGraph pipeline built by build_agent_graph()
+# and invoked through run_agent_pipeline().
 
 
 def memory_retrieve_node(state: AgentState) -> Dict[str, Any]:
     """
     Memory retrieval node: fetches session context for Planner.
-    
-    Retrieves the most recent memory summary and last 2 raw turns from the database,
-    concatenates them into memory_context string for injection into Planner prompt.
-    
-    Args:
-        state: Agent state dict containing:
-            - session_id: str - Session identifier
-            - db: Session - Database session (optional, for now returns placeholder)
-    
-    Returns:
-        dict with:
-            - memory_context: str - Formatted memory context for Planner
+
+    Retrieves the most recent memory summary and last 2 raw turns from the
+    database via MemorySystem.retrieve(), then injects the result as
+    memory_context into the agent state for the Planner.
     """
+    import asyncio
     session_id = state.get("session_id", "")
-    
-    # TODO: Implement actual database retrieval when memory system is ready
-    # For now, return placeholder context
-    logger.info(f"Memory retrieve for session {session_id} (placeholder)")
-    
-    return {
-        "memory_context": f"[Session {session_id}]\nNo prior context available."
-    }
+
+    if _current_db_factory is None:
+        logger.warning("No db factory set for memory_retrieve_node; returning empty context")
+        return {"memory_context": ""}
+
+    async def _run():
+        async with _current_db_factory() as db:
+            return await MemorySystem().retrieve(db=db, session_id=session_id)
+
+    try:
+        memory_context = asyncio.get_event_loop().run_until_complete(_run())
+    except Exception as e:
+        logger.error(f"memory_retrieve_node failed: {e}")
+        memory_context = ""
+
+    logger.info(f"Memory retrieved for session {session_id} ({len(memory_context)} chars)")
+    return {"memory_context": memory_context}
 
 
 def memory_write_node(state: AgentState) -> Dict[str, Any]:
     """
-    Memory write node: persists turn to memory_summaries table.
-    
-    Extracts key entities from query and response, writes raw turn to database
-    for future retrieval and summarization.
-    
-    Args:
-        state: Agent state dict containing:
-            - session_id: str - Session identifier
-            - query: str - User query
-            - draft_response: str - Generated response
-            - turn_count: int - Current turn number (optional)
-            - db: Session - Database session (optional, for now logs only)
-    
-    Returns:
-        dict with:
-            - turn_count: int - Incremented turn count
+    Memory write node: persists the current turn to the memory_summaries table.
+
+    Delegates to MemorySystem.write() to store the raw turn data.
     """
-    session_id = state.get("session_id", "")
-    query = state.get("query", "")
+    import asyncio
+    session_id     = state.get("session_id", "")
+    query          = state.get("query", "")
     draft_response = state.get("draft_response", "")
-    turn_count = state.get("turn_count", 0) + 1
-    
-    # TODO: Implement actual database write when memory system is ready
-    logger.info(
-        f"Memory write for session {session_id}, turn {turn_count}: "
-        f"query={query[:50]}..., response={draft_response[:50]}..."
-    )
-    
-    return {
-        "turn_count": turn_count
-    }
+    turn_count     = state.get("turn_count", 0) + 1
+
+    if _current_db_factory is None:
+        logger.warning("No db factory set for memory_write_node; skipping")
+        return {"turn_count": turn_count}
+
+    async def _run():
+        async with _current_db_factory() as db:
+            await MemorySystem().write(
+                db=db,
+                session_id=session_id,
+                turn_num=turn_count,
+                query=query,
+                response=draft_response,
+            )
+
+    try:
+        asyncio.get_event_loop().run_until_complete(_run())
+        logger.info(f"Memory written for session {session_id}, turn {turn_count}")
+    except Exception as e:
+        logger.error(f"memory_write_node failed: {e}")
+
+    return {"turn_count": turn_count}
 
 
 def memory_summarizer_node(state: AgentState) -> Dict[str, Any]:
     """
-    Memory summarizer node: compresses last 5 turns into 150-word summary.
-    
-    Fetches last 5 raw turns from database, calls LLM to compress into summary,
-    writes compressed summary back to memory_summaries table.
-    
-    Triggers only when turn_count % 5 == 0.
-    
-    Args:
-        state: Agent state dict containing:
-            - session_id: str - Session identifier
-            - turn_count: int - Current turn number
-            - model_used: str - LLM model to use
-            - db: Session - Database session (optional, for now logs only)
-    
-    Returns:
-        dict (empty, no state updates needed)
+    Memory summarizer node: compresses the last 5 turns into a 150-word summary.
+
+    Triggered when turn_count % 5 == 0. Delegates to MemorySystem.summarize().
     """
+    import asyncio
     session_id = state.get("session_id", "")
     turn_count = state.get("turn_count", 0)
-    model_used = state.get("model_used", "gemini")
-    
-    # TODO: Implement actual summarization when memory system is ready
-    logger.info(
-        f"Memory summarizer triggered for session {session_id} at turn {turn_count} "
-        f"(placeholder - would compress last 5 turns with {model_used})"
+
+    if _current_db_factory is None:
+        logger.warning("No db factory set for memory_summarizer_node; skipping")
+        return {}
+
+    llm_router = LLMRouter(
+        ollama_base_url=state.get("ollama_base_url", "http://localhost:11434"),
+        gemini_api_key=state.get("gemini_api_key"),
     )
-    
+
+    async def _run():
+        async with _current_db_factory() as db:
+            await MemorySystem(llm_router=llm_router).summarize(db=db, session_id=session_id)
+
+    try:
+        asyncio.get_event_loop().run_until_complete(_run())
+        logger.info(f"Memory summarized for session {session_id} at turn {turn_count}")
+    except Exception as e:
+        logger.error(f"memory_summarizer_node failed: {e}")
+
     return {}
 
 
@@ -941,14 +914,9 @@ def route_after_memory_write(state: AgentState) -> str:
     return "end"
 
 
-def increment_repair_count(state: AgentState) -> Dict[str, Any]:
-    """
-    Helper to increment repair_count when routing back to planner.
-    
-    This is called as part of the repair loop to track iterations.
-    """
-    repair_count = state.get("repair_count", 0)
-    return {"repair_count": repair_count + 1}
+# increment_repair_count was removed — repair_count is incremented inside
+# critic_node itself when returning a repair verdict, so a separate helper
+# here was redundant and was never wired into the graph.
 
 
 def build_agent_graph() -> StateGraph:
@@ -1037,6 +1005,7 @@ async def run_agent_pipeline(
     model_used: str,
     db: Any,
     retriever: Any,
+    db_session_factory: Any = None,
     ollama_base_url: str = "http://localhost:11434",
     gemini_api_key: Optional[str] = None,
     company: Optional[str] = None,
@@ -1055,13 +1024,8 @@ async def run_agent_pipeline(
         query: User's query text
         session_id: Session identifier for context tracking
         model_used: LLM model to use ("llama", "gemma", or "gemini")
-        db: Database session for persistence
+        db: AsyncSession for persistence
         retriever: HybridRetriever instance for document retrieval
-        ollama_base_url: Ollama API base URL
-        gemini_api_key: Gemini API key
-        company: Optional company filter for retrieval
-        model_used: LLM model to use ("llama", "gemma", or "gemini")
-        db: Database session for persistence
         ollama_base_url: Ollama API base URL
         gemini_api_key: Gemini API key
         company: Optional company filter for retrieval
@@ -1084,11 +1048,14 @@ async def run_agent_pipeline(
     # Start timing
     start_time = time.time()
     
-    # Set global retriever for executor node to access
-    global _current_retriever
+    # Store non-serializable objects in module-level globals so they are
+    # accessible inside LangGraph nodes without being put into the state dict
+    # (MemorySaver uses msgpack which cannot serialize SQLAlchemy/HybridRetriever).
+    global _current_retriever, _current_db_factory
     _current_retriever = retriever
+    _current_db_factory = db_session_factory
     
-    # Build initial state (without retriever - not serializable)
+    # Build initial state — only JSON-serializable primitives go here.
     initial_state: AgentState = {
         "query": query,
         "session_id": session_id,

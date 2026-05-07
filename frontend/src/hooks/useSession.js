@@ -52,35 +52,26 @@ const useSession = () => {
     setError(null);
 
     try {
+      // /history returns { session_id: str, turns: HistoryTurn[] }
+      // HistoryTurn: { query_id, query_text, timestamp, model_used,
+      //                response_text, confidence_score, refusal_flag, repair_count }
       const historyData = await getHistory(sessionId);
-      
-      // Parse memory summary from history data
-      // The backend returns memory_summaries array with compressed summaries
-      if (historyData.memory_summaries && historyData.memory_summaries.length > 0) {
-        // Get the most recent memory summary
-        const latestSummary = historyData.memory_summaries[historyData.memory_summaries.length - 1];
-        setMemorySummary(latestSummary.summary_text);
-      } else {
-        setMemorySummary(null);
-      }
 
-      // Parse recent turns (query-response pairs)
-      // The backend returns queries with their associated responses
-      if (historyData.queries && historyData.queries.length > 0) {
-        // Get last 5 turns (or fewer if less than 5 exist)
-        const lastFiveTurns = historyData.queries.slice(-5).map((query) => ({
-          query_id: query.id,
-          query_text: query.query_text,
-          timestamp: query.timestamp,
-          response_text: query.response?.response_text || 'No response',
-          confidence_score: query.response?.confidence_score || 0,
-          refusal_flag: query.response?.refusal_flag || false,
-        }));
-        
-        setRecentTurns(lastFiveTurns);
-      } else {
-        setRecentTurns([]);
-      }
+      // Memory summary is not returned by /history; clear it.
+      // (It is stored in memory_summaries table but not yet exposed via this endpoint.)
+      setMemorySummary(null);
+
+      // Parse recent turns from `turns` array (last 5, most recent last)
+      const turns = historyData.turns ?? [];
+      const lastFiveTurns = turns.slice(-5).map((turn) => ({
+        query_id:        turn.query_id,
+        query_text:      turn.query_text,
+        timestamp:       turn.timestamp,
+        confidence_score: turn.confidence_score ?? 0,
+        refusal_flag:    turn.refusal_flag ?? false,
+      }));
+
+      setRecentTurns(lastFiveTurns);
     } catch (err) {
       setError(err);
       console.error('Failed to fetch session history:', err);

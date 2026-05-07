@@ -18,7 +18,7 @@ class LLMRouter:
     Provides a unified interface for calling:
     - Llama 3.2 3B via Ollama
     - Gemma 2 9B via Ollama
-    - Gemini 2.0 Flash via Google AI Studio
+    - Gemini 2.5 Flash via Google AI Studio
     
     Models are called sequentially (never concurrently) to avoid RAM pressure.
     Implements retry logic for timeout exceptions.

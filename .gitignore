@@ -25,6 +25,7 @@ dist/
 # Environment and secrets
 .env
 .env.*
+!.env.example
 
 # Logs
 *.log
@@ -33,6 +34,9 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 
 # Data files (SEC filings are large and should not be committed)
 data/
@@ -40,6 +44,10 @@ data/
 # ChromaDB database files (large binary files)
 chroma_db/
 *.sqlite3
+
+# Jupyter notebooks (if used for experimentation)
+*.ipynb
+.ipynb_checkpoints/
 
 # Others
 .kiro/
