@@ -31,6 +31,7 @@ class AgentState(TypedDict, total=False):
     # Configuration fields
     ollama_base_url: str
     gemini_api_key: str
+    groq_api_key: Optional[str]
     
     # Planner fields
     plan: List[Dict[str, Any]]
@@ -233,7 +234,8 @@ Example format:
     try:
         llm_router = LLMRouter(
             ollama_base_url=state.get("ollama_base_url", "http://localhost:11434"),
-            gemini_api_key=state.get("gemini_api_key")
+            gemini_api_key=state.get("gemini_api_key"),
+            groq_api_key=state.get("groq_api_key")
         )
         
         response_text = llm_router.complete(
@@ -356,7 +358,8 @@ def executor_node(state: dict) -> dict:
     # Initialize LLM router
     llm_router = LLMRouter(
         ollama_base_url=state.get("ollama_base_url", "http://localhost:11434"),
-        gemini_api_key=state.get("gemini_api_key")
+        gemini_api_key=state.get("gemini_api_key"),
+        groq_api_key=state.get("groq_api_key")
     )
     
     # Execute each tool call and collect results
@@ -1008,6 +1011,7 @@ async def run_agent_pipeline(
     db_session_factory: Any = None,
     ollama_base_url: str = "http://localhost:11434",
     gemini_api_key: Optional[str] = None,
+    groq_api_key: Optional[str] = None,
     company: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
@@ -1063,6 +1067,7 @@ async def run_agent_pipeline(
         "company": company,
         "ollama_base_url": ollama_base_url,
         "gemini_api_key": gemini_api_key,
+        "groq_api_key": groq_api_key,
         "repair_count": 0,
         "turn_count": 0,
         "refusal": False,

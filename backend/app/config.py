@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # LLM configuration
     ollama_base_url: str = "http://localhost:11434"
     gemini_api_key: str  # Required - no default
+    groq_api_key: Optional[str] = None  # Optional - for Groq-hosted open-source models
     
     # Evaluation configuration
     few_shot_dedup_threshold: float = 0.85

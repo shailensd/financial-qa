@@ -16,8 +16,8 @@ class LLMRouter:
     Router for LLM model calls using LiteLLM.
     
     Provides a unified interface for calling:
-    - Llama 3.2 3B via Ollama
-    - Gemma 2 9B via Ollama
+    - Llama 3.3 70B via Groq
+    - Llama 4 Scout via Groq
     - Gemini 2.5 Flash via Google AI Studio
     
     Models are called sequentially (never concurrently) to avoid RAM pressure.
@@ -26,28 +26,26 @@ class LLMRouter:
     
     # Model name mappings
     MODELS = {
-        "llama": "ollama/llama3.2:3b",
-        "gemma": "ollama/gemma2:9b",
+        "llama": "groq/llama-3.3-70b-versatile",
+        "gemma": "groq/meta-llama/llama-4-scout-17b-16e-instruct",
         "gemini": "gemini/gemini-2.5-flash"
     }
     
-    def __init__(self, ollama_base_url: str = "http://localhost:11434", gemini_api_key: Optional[str] = None):
+    def __init__(self, ollama_base_url: str = "http://localhost:11434", gemini_api_key: Optional[str] = None, groq_api_key: Optional[str] = None):
         """
         Initialize the LLM router.
         
         Args:
-            ollama_base_url: Base URL for Ollama API (default: http://localhost:11434)
+            ollama_base_url: Base URL for Ollama API (kept for backwards compatibility)
             gemini_api_key: API key for Google AI Studio (required for Gemini)
+            groq_api_key: API key for Groq (required for Llama models)
         """
         self.ollama_base_url = ollama_base_url
         self.gemini_api_key = gemini_api_key
+        self.groq_api_key = groq_api_key
         
         # Configure LiteLLM
         litellm.set_verbose = False
-        
-        # Set API base for Ollama models
-        if ollama_base_url:
-            litellm.api_base = ollama_base_url
     
     def complete(self, model: str, messages: List[Dict[str, str]], **kwargs) -> str:
         """
@@ -105,6 +103,10 @@ class LLMRouter:
         # Add API key for Gemini models
         if "gemini" in model and self.gemini_api_key:
             call_kwargs["api_key"] = self.gemini_api_key
+        
+        # Add API key for Groq models
+        if "groq" in model and self.groq_api_key:
+            call_kwargs["api_key"] = self.groq_api_key
         
         # First attempt
         try:

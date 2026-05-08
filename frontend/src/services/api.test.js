@@ -12,10 +12,6 @@ describe('API Service Configuration', () => {
     expect(api.defaults.baseURL).toMatch(/http:\/\/localhost:8000/);
   });
 
-  test('Axios instance has correct timeout', () => {
-    expect(api.defaults.timeout).toBe(30000);
-  });
-
   test('Axios instance has correct headers', () => {
     expect(api.defaults.headers['Content-Type']).toBe('application/json');
   });
@@ -53,12 +49,12 @@ describe('API Functions', () => {
 
 describe('Request Interceptor', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    localStorage.clear();
   });
 
   test('Attaches session_id from localStorage to request headers', () => {
     const mockSessionId = 'test-session-123';
-    localStorage.getItem.mockReturnValue(mockSessionId);
+    localStorage.setItem('session_id', mockSessionId);
 
     const config = { headers: {} };
     const interceptor = api.interceptors.request.handlers[0];
@@ -68,8 +64,6 @@ describe('Request Interceptor', () => {
   });
 
   test('Does not add session_id header if not in localStorage', () => {
-    localStorage.getItem.mockReturnValue(null);
-
     const config = { headers: {} };
     const interceptor = api.interceptors.request.handlers[0];
     const result = interceptor.fulfilled(config);

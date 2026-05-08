@@ -325,6 +325,7 @@ async def query_endpoint(
                 db_session_factory=SessionLocal,
                 ollama_base_url=settings.ollama_base_url,
                 gemini_api_key=settings.gemini_api_key,
+                groq_api_key=settings.groq_api_key,
                 company=request.company,
             )
             

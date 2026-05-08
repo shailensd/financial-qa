@@ -9,8 +9,8 @@ import useSession from './hooks/useSession';
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 const MODEL_META = {
-  llama:  { label: 'Llama 3.2', icon: '🦙', color: '#fb923c' },
-  gemma:  { label: 'Gemma 2',   icon: '💎', color: '#34d399' },
+  llama:  { label: 'Llama 3.3 70B',    icon: '🦙', color: '#fb923c' },
+  gemma:  { label: 'Llama 4 Scout',    icon: '🔭', color: '#34d399' },
   gemini: { label: 'Gemini 2.5 Flash', icon: '✨', color: '#60a5fa' },
 };
 

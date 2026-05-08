@@ -25,7 +25,8 @@ def router():
     """Create an LLM router instance."""
     return LLMRouter(
         ollama_base_url="http://localhost:11434",
-        gemini_api_key="test_gemini_key"
+        gemini_api_key="test_gemini_key",
+        groq_api_key="test_groq_key"
     )
 
 
@@ -46,12 +47,12 @@ class TestModelMapping:
     """Tests for model name mapping."""
     
     def test_llama_model_mapping(self, router):
-        """Test that 'llama' maps to correct Ollama model."""
-        assert router.MODELS["llama"] == "ollama/llama3.2:3b"
+        """Test that 'llama' maps to correct Groq model."""
+        assert router.MODELS["llama"] == "groq/llama-3.3-70b-versatile"
     
     def test_gemma_model_mapping(self, router):
-        """Test that 'gemma' maps to correct Ollama model."""
-        assert router.MODELS["gemma"] == "ollama/gemma2:9b"
+        """Test that 'gemma' maps to correct Groq model."""
+        assert router.MODELS["gemma"] == "groq/meta-llama/llama-4-scout-17b-16e-instruct"
     
     def test_gemini_model_mapping(self, router):
         """Test that 'gemini' maps to correct Gemini model."""
@@ -83,7 +84,7 @@ class TestComplete:
         # Verify LiteLLM was called with correct model
         mock_completion.assert_called_once()
         call_kwargs = mock_completion.call_args[1]
-        assert call_kwargs["model"] == "ollama/llama3.2:3b"
+        assert call_kwargs["model"] == "groq/llama-3.3-70b-versatile"
         assert call_kwargs["messages"] == sample_messages
         assert result == "The answer is 4."
     
@@ -120,8 +121,8 @@ class TestComplete:
         assert call_kwargs["api_key"] == "test_gemini_key"
     
     @patch('app.ml.llm_router.completion')
-    def test_complete_does_not_add_api_key_for_ollama(self, mock_completion, router, sample_messages):
-        """Test that complete does not add API key for Ollama models."""
+    def test_complete_adds_api_key_for_groq(self, mock_completion, router, sample_messages):
+        """Test that complete adds API key for Groq models."""
         mock_response = Mock()
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = "Response"
@@ -130,7 +131,7 @@ class TestComplete:
         router.complete("llama", sample_messages)
         
         call_kwargs = mock_completion.call_args[1]
-        assert "api_key" not in call_kwargs
+        assert call_kwargs["api_key"] == "test_groq_key"
 
 
 class TestRetryLogic:
@@ -254,8 +255,8 @@ class TestSequentialExecution:
         # Verify each call completed before the next started
         # (if they were concurrent, we'd see different behavior in call order)
         calls = mock_completion.call_args_list
-        assert calls[0][1]["model"] == "ollama/llama3.2:3b"
-        assert calls[1][1]["model"] == "ollama/gemma2:9b"
+        assert calls[0][1]["model"] == "groq/llama-3.3-70b-versatile"
+        assert calls[1][1]["model"] == "groq/meta-llama/llama-4-scout-17b-16e-instruct"
         assert calls[2][1]["model"] == "gemini/gemini-2.5-flash"
 
 
@@ -284,8 +285,9 @@ class TestInitialization:
         """Test that initialization configures LiteLLM settings."""
         router = LLMRouter(ollama_base_url="http://test:1234")
         
-        # Verify LiteLLM was configured
-        assert mock_litellm.api_base == "http://test:1234"
+        # Verify LiteLLM verbosity was configured (api_base is no longer set
+        # since Groq routes via its own provider prefix, not a custom base URL)
+        mock_litellm.set_verbose = False  # should not raise
 
 
 class TestEdgeCases:

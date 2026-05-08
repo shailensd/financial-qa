@@ -8,7 +8,7 @@ A multi-model financial Q&A system that answers questions about SEC filings usin
 |---|---|
 | **Frontend** | React 18 + Vite, Vanilla CSS (dark mode) |
 | **Backend** | FastAPI + SQLAlchemy (async) + PostgreSQL |
-| **LLMs** | Gemini 2.5 Flash (Google AI) · Llama 3.2 3B · Gemma 2 9B (both via Ollama) |
+| **LLMs** | Gemini 2.5 Flash (Google AI) · Llama 3.3 70B Versatile (Groq) |
 | **Retrieval** | ChromaDB (dense) + BM25Okapi (sparse) fused via Reciprocal Rank Fusion |
 | **Agent** | LangGraph — Planner → Executor → Critic loop (max 2 repair iterations) |
 | **Embeddings** | `all-MiniLM-L6-v2` via `sentence-transformers` |
@@ -18,7 +18,7 @@ A multi-model financial Q&A system that answers questions about SEC filings usin
 - Python 3.11+
 - Node.js 18+
 - PostgreSQL running locally
-- [Ollama](https://ollama.com) (if using local models)
+- Groq API key (for Llama)
 - Google AI Studio API key (for Gemini)
 
 ## Setup
@@ -35,7 +35,7 @@ pip install -r requirements.txt
 Copy and fill in the environment file:
 ```bash
 cp ../.env.example backend/.env
-# Edit backend/.env — set DATABASE_URL and GEMINI_API_KEY
+# Edit backend/.env — set DATABASE_URL, GEMINI_API_KEY, and GROQ_API_KEY
 ```
 
 Create the database and run migrations:
@@ -63,13 +63,9 @@ python scripts/ingest_filings.py
 python scripts/verify_ingestion.py
 ```
 
-### 3. Local Models (optional)
+### 3. Cloud Models
 
-```bash
-ollama serve
-ollama pull llama3.2:3b   # ~2 GB
-ollama pull gemma2:9b     # ~5.5 GB
-```
+No local model setup is required. The system connects to Groq and Google AI Studio APIs directly.
 
 ### 4. Frontend
 
@@ -100,7 +96,7 @@ npm run dev   # http://localhost:5173
 }
 ```
 
-`models` accepts any combination of `"llama"`, `"gemma"`, `"gemini"`. Models run **sequentially** to avoid RAM pressure.
+`models` accepts any combination of `"llama"` and `"gemini"`. Models run **sequentially** to avoid rate limits and RAM pressure.
 
 ## Agent Pipeline
 
@@ -169,7 +165,7 @@ financial-qa/
 cd backend
 pytest tests/unit/ -v
 
-# Backend integration tests (requires running DB + Ollama)
+# Backend integration tests (requires running DB)
 pytest tests/integration/ -v
 
 # Frontend tests
@@ -183,7 +179,7 @@ npm test
 |---|---|---|---|
 | `DATABASE_URL` | ✅ | — | PostgreSQL connection string |
 | `GEMINI_API_KEY` | ✅ | — | Google AI Studio API key |
-| `OLLAMA_BASE_URL` | | `http://localhost:11434` | Ollama API endpoint |
+| `GROQ_API_KEY` | ✅ | — | Groq API key |
 | `CHROMA_PERSIST_DIR` | | `./chroma_db` | ChromaDB storage path |
 | `CHUNK_SIZE` | | `800` | Token size per chunk |
 | `CHUNK_OVERLAP` | | `200` | Token overlap between chunks |

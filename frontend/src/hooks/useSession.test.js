@@ -16,8 +16,8 @@ describe('useSession', () => {
     
     // Default mock implementation to prevent errors
     api.getHistory.mockResolvedValue({
-      memory_summaries: [],
-      queries: [],
+      session_id: 'test-uuid',
+      turns: [],
     });
   });
 
@@ -54,25 +54,14 @@ describe('useSession', () => {
 
   it('should fetch and parse session history on mount', async () => {
     const mockHistoryData = {
-      memory_summaries: [
+      session_id: 'test-uuid-1234',
+      turns: [
         {
-          id: 1,
-          session_id: 'test-uuid-1234',
-          turn_range_start: 1,
-          turn_range_end: 5,
-          summary_text: 'User asked about Apple revenue in FY2023.',
-        },
-      ],
-      queries: [
-        {
-          id: 1,
+          query_id: 1,
           query_text: 'What was Apple revenue in FY2023?',
           timestamp: '2024-01-01T10:00:00Z',
-          response: {
-            response_text: 'Apple revenue was $383.3B in FY2023.',
-            confidence_score: 0.95,
-            refusal_flag: false,
-          },
+          confidence_score: 0.95,
+          refusal_flag: false,
         },
       ],
     };
@@ -85,16 +74,16 @@ describe('useSession', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.memorySummary).toBe('User asked about Apple revenue in FY2023.');
+    expect(result.current.memorySummary).toBeNull();
     expect(result.current.recentTurns).toHaveLength(1);
     expect(result.current.recentTurns[0].query_text).toBe('What was Apple revenue in FY2023?');
-    expect(result.current.recentTurns[0].response_text).toBe('Apple revenue was $383.3B in FY2023.');
+    expect(result.current.recentTurns[0].confidence_score).toBe(0.95);
   });
 
   it('should handle empty history gracefully', async () => {
     const mockHistoryData = {
-      memory_summaries: [],
-      queries: [],
+      session_id: 'test-uuid',
+      turns: [],
     };
 
     api.getHistory.mockResolvedValue(mockHistoryData);
@@ -111,16 +100,13 @@ describe('useSession', () => {
 
   it('should limit recent turns to last 5', async () => {
     const mockHistoryData = {
-      memory_summaries: [],
-      queries: Array.from({ length: 10 }, (_, i) => ({
-        id: i + 1,
+      session_id: 'test-uuid',
+      turns: Array.from({ length: 10 }, (_, i) => ({
+        query_id: i + 1,
         query_text: `Query ${i + 1}`,
         timestamp: `2024-01-01T10:${i}:00Z`,
-        response: {
-          response_text: `Response ${i + 1}`,
-          confidence_score: 0.9,
-          refusal_flag: false,
-        },
+        confidence_score: 0.9,
+        refusal_flag: false,
       })),
     };
 
@@ -154,12 +140,16 @@ describe('useSession', () => {
 
   it('should allow manual refresh of session data', async () => {
     const mockHistoryData = {
-      memory_summaries: [
+      session_id: 'test-uuid',
+      turns: [
         {
-          summary_text: 'Initial summary',
+          query_id: 1,
+          query_text: 'Initial query',
+          timestamp: '2024-01-01T10:00:00Z',
+          confidence_score: 0.95,
+          refusal_flag: false,
         },
       ],
-      queries: [],
     };
 
     api.getHistory.mockResolvedValue(mockHistoryData);
@@ -170,16 +160,20 @@ describe('useSession', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.memorySummary).toBe('Initial summary');
+    expect(result.current.recentTurns[0].query_text).toBe('Initial query');
 
     // Update mock data
     const updatedHistoryData = {
-      memory_summaries: [
+      session_id: 'test-uuid',
+      turns: [
         {
-          summary_text: 'Updated summary',
+          query_id: 1,
+          query_text: 'Updated query',
+          timestamp: '2024-01-01T10:00:00Z',
+          confidence_score: 0.95,
+          refusal_flag: false,
         },
       ],
-      queries: [],
     };
 
     api.getHistory.mockResolvedValue(updatedHistoryData);
@@ -190,19 +184,19 @@ describe('useSession', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.memorySummary).toBe('Updated summary');
+      expect(result.current.recentTurns[0].query_text).toBe('Updated query');
     });
   });
 
-  it('should handle queries without responses', async () => {
+  it('should provide default values for missing fields in turns', async () => {
     const mockHistoryData = {
-      memory_summaries: [],
-      queries: [
+      session_id: 'test-uuid',
+      turns: [
         {
-          id: 1,
+          query_id: 1,
           query_text: 'Test query',
           timestamp: '2024-01-01T10:00:00Z',
-          // No response field
+          // Missing confidence_score and refusal_flag
         },
       ],
     };
@@ -216,7 +210,7 @@ describe('useSession', () => {
     });
 
     expect(result.current.recentTurns).toHaveLength(1);
-    expect(result.current.recentTurns[0].response_text).toBe('No response');
     expect(result.current.recentTurns[0].confidence_score).toBe(0);
+    expect(result.current.recentTurns[0].refusal_flag).toBe(false);
   });
 });

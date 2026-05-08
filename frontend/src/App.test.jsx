@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import App from './App';
 import * as useQueryModule from './hooks/useQuery';
 import * as useSessionModule from './hooks/useSession';
@@ -138,23 +138,27 @@ describe('App', () => {
     expect(screen.getByText('Apple revenue was $383B in FY2023.')).toBeInTheDocument();
   });
 
-  it('renders CitationList inside result card when citations exist', () => {
+  it('renders CitationList inside result card when citations exist and button is clicked', () => {
     vi.spyOn(useQueryModule, 'default').mockReturnValue({
       ...BASE_QUERY,
       results: [MOCK_RESULT],
     });
     render(<App />);
+    const button = screen.getByText(/Citations \(1\)/);
+    fireEvent.click(button);
     const cl = screen.getByTestId('citation-list');
     expect(cl).toBeInTheDocument();
     expect(cl).toHaveTextContent('citations:1');
   });
 
-  it('renders AgentTrace inside result card when trace exists', () => {
+  it('renders AgentTrace inside result card when trace exists and button is clicked', () => {
     vi.spyOn(useQueryModule, 'default').mockReturnValue({
       ...BASE_QUERY,
       results: [MOCK_RESULT],
     });
     render(<App />);
+    const button = screen.getByText(/Agent Trace/);
+    fireEvent.click(button);
     expect(screen.getByTestId('agent-trace')).toHaveTextContent('trace:yes');
   });
 
@@ -170,6 +174,6 @@ describe('App', () => {
     render(<App />);
     // Both model labels should appear in the cards
     expect(screen.getByText('Gemini 2.5 Flash')).toBeInTheDocument();
-    expect(screen.getByText('Llama 3.2')).toBeInTheDocument();
+    expect(screen.getByText('Llama 3.3 70B')).toBeInTheDocument();
   });
 });

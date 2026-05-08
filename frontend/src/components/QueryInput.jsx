@@ -25,8 +25,8 @@ const SP500_COMPANIES = [
 ];
 
 const AVAILABLE_MODELS = [
-  { id: 'llama', label: 'Llama 3.2', icon: '🦙', desc: 'Ollama · Local' },
-  { id: 'gemma', label: 'Gemma 2', icon: '💎', desc: 'Ollama · Local' },
+  { id: 'llama', label: 'Llama 3.3 70B', icon: '🦙', desc: 'Groq · Cloud' },
+  { id: 'gemma', label: 'Llama 4 Scout', icon: '🔭', desc: 'Groq · Cloud' },
   { id: 'gemini', label: 'Gemini 2.5 Flash', icon: '✨', desc: 'Google AI' },
 ];
 

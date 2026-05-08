@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import QueryInput from './QueryInput';
 
 describe('QueryInput Component', () => {
@@ -19,22 +19,19 @@ describe('QueryInput Component', () => {
       />
     );
 
-    // Check for main heading
-    expect(screen.getByText('Ask a Question')).toBeInTheDocument();
-
     // Check for company dropdown
-    expect(screen.getByLabelText('Select Company')).toBeInTheDocument();
+    expect(screen.getByLabelText('Company')).toBeInTheDocument();
 
-    // Check for question textarea
-    expect(screen.getByLabelText('Your Question')).toBeInTheDocument();
+    // Check for question input
+    expect(screen.getByLabelText('Question')).toBeInTheDocument();
 
     // Check for model checkboxes
-    expect(screen.getByLabelText(/Llama 3.2 3B/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Gemma 2 9B/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Gemini 2.0 Flash/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Llama 3.3 70B/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Llama 4 Scout/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Gemini 2.5 Flash/i)).toBeInTheDocument();
 
     // Check for submit button
-    expect(screen.getByRole('button', { name: /Submit Query/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ask/i })).toBeInTheDocument();
   });
 
   it('has Gemini selected by default', () => {
@@ -46,13 +43,13 @@ describe('QueryInput Component', () => {
       />
     );
 
-    const geminiCheckbox = screen.getByLabelText(/Gemini 2.0 Flash/i);
+    const geminiCheckbox = screen.getByLabelText(/Gemini 2.5 Flash/i);
     expect(geminiCheckbox).toBeChecked();
 
-    const llamaCheckbox = screen.getByLabelText(/Llama 3.2 3B/i);
+    const llamaCheckbox = screen.getByLabelText(/Llama 3.3 70B/i);
     expect(llamaCheckbox).not.toBeChecked();
 
-    const gemmaCheckbox = screen.getByLabelText(/Gemma 2 9B/i);
+    const gemmaCheckbox = screen.getByLabelText(/Llama 4 Scout/i);
     expect(gemmaCheckbox).not.toBeChecked();
   });
 
@@ -65,8 +62,8 @@ describe('QueryInput Component', () => {
       />
     );
 
-    const llamaCheckbox = screen.getByLabelText(/Llama 3.2 3B/i);
-    const gemmaCheckbox = screen.getByLabelText(/Gemma 2 9B/i);
+    const llamaCheckbox = screen.getByLabelText(/Llama 3.3 70B/i);
+    const gemmaCheckbox = screen.getByLabelText(/Llama 4 Scout/i);
 
     // Select Llama
     fireEvent.click(llamaCheckbox);
@@ -81,7 +78,7 @@ describe('QueryInput Component', () => {
     expect(llamaCheckbox).not.toBeChecked();
   });
 
-  it('allows typing in the question textarea', () => {
+  it('allows typing in the question input', () => {
     render(
       <QueryInput
         onSubmit={mockOnSubmit}
@@ -90,11 +87,11 @@ describe('QueryInput Component', () => {
       />
     );
 
-    const textarea = screen.getByLabelText('Your Question');
+    const input = screen.getByLabelText('Question');
     const testQuestion = "What was Apple's revenue in 2023?";
 
-    fireEvent.change(textarea, { target: { value: testQuestion } });
-    expect(textarea.value).toBe(testQuestion);
+    fireEvent.change(input, { target: { value: testQuestion } });
+    expect(input.value).toBe(testQuestion);
   });
 
   it('allows selecting a company from dropdown', () => {
@@ -106,15 +103,13 @@ describe('QueryInput Component', () => {
       />
     );
 
-    const companySelect = screen.getByLabelText('Select Company');
+    const companySelect = screen.getByLabelText('Company');
 
     fireEvent.change(companySelect, { target: { value: 'Apple Inc.' } });
     expect(companySelect.value).toBe('Apple Inc.');
   });
 
-  it('shows alert when submitting without company selection', () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
+  it('shows inline validation when submitting without company selection', () => {
     render(
       <QueryInput
         onSubmit={mockOnSubmit}
@@ -123,21 +118,17 @@ describe('QueryInput Component', () => {
       />
     );
 
-    const textarea = screen.getByLabelText('Your Question');
-    fireEvent.change(textarea, { target: { value: 'Test question' } });
+    const input = screen.getByLabelText('Question');
+    fireEvent.change(input, { target: { value: 'Test question' } });
 
-    const submitButton = screen.getByRole('button', { name: /Submit Query/i });
+    const submitButton = screen.getByRole('button', { name: /Ask/i });
     fireEvent.click(submitButton);
 
-    expect(alertSpy).toHaveBeenCalledWith('Please select a company');
+    expect(screen.getByText('Please select a company.')).toBeInTheDocument();
     expect(mockOnSubmit).not.toHaveBeenCalled();
-
-    alertSpy.mockRestore();
   });
 
-  it('shows alert when submitting without question', () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
+  it('shows inline validation when submitting without question', () => {
     render(
       <QueryInput
         onSubmit={mockOnSubmit}
@@ -146,21 +137,17 @@ describe('QueryInput Component', () => {
       />
     );
 
-    const companySelect = screen.getByLabelText('Select Company');
+    const companySelect = screen.getByLabelText('Company');
     fireEvent.change(companySelect, { target: { value: 'Apple Inc.' } });
 
-    const submitButton = screen.getByRole('button', { name: /Submit Query/i });
+    const submitButton = screen.getByRole('button', { name: /Ask/i });
     fireEvent.click(submitButton);
 
-    expect(alertSpy).toHaveBeenCalledWith('Please enter a question');
+    expect(screen.getByText('Please enter a question.')).toBeInTheDocument();
     expect(mockOnSubmit).not.toHaveBeenCalled();
-
-    alertSpy.mockRestore();
   });
 
-  it('shows alert when submitting without any model selected', () => {
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
+  it('shows inline validation when submitting without any model selected', () => {
     render(
       <QueryInput
         onSubmit={mockOnSubmit}
@@ -169,23 +156,21 @@ describe('QueryInput Component', () => {
       />
     );
 
-    const companySelect = screen.getByLabelText('Select Company');
+    const companySelect = screen.getByLabelText('Company');
     fireEvent.change(companySelect, { target: { value: 'Apple Inc.' } });
 
-    const textarea = screen.getByLabelText('Your Question');
-    fireEvent.change(textarea, { target: { value: 'Test question' } });
+    const input = screen.getByLabelText('Question');
+    fireEvent.change(input, { target: { value: 'Test question' } });
 
     // Deselect the default Gemini model
-    const geminiCheckbox = screen.getByLabelText(/Gemini 2.0 Flash/i);
+    const geminiCheckbox = screen.getByLabelText(/Gemini 2.5 Flash/i);
     fireEvent.click(geminiCheckbox);
 
-    const submitButton = screen.getByRole('button', { name: /Submit Query/i });
+    const submitButton = screen.getByRole('button', { name: /Ask/i });
     fireEvent.click(submitButton);
 
-    expect(alertSpy).toHaveBeenCalledWith('Please select at least one model');
+    expect(screen.getByText('Please select at least one model.')).toBeInTheDocument();
     expect(mockOnSubmit).not.toHaveBeenCalled();
-
-    alertSpy.mockRestore();
   });
 
   it('submits correct payload when form is valid', () => {
@@ -198,19 +183,19 @@ describe('QueryInput Component', () => {
     );
 
     // Fill in the form
-    const companySelect = screen.getByLabelText('Select Company');
+    const companySelect = screen.getByLabelText('Company');
     fireEvent.change(companySelect, { target: { value: 'Apple Inc.' } });
 
-    const textarea = screen.getByLabelText('Your Question');
+    const input = screen.getByLabelText('Question');
     const testQuestion = "What was Apple's revenue in 2023?";
-    fireEvent.change(textarea, { target: { value: testQuestion } });
+    fireEvent.change(input, { target: { value: testQuestion } });
 
     // Select additional models
-    const llamaCheckbox = screen.getByLabelText(/Llama 3.2 3B/i);
+    const llamaCheckbox = screen.getByLabelText(/Llama 3.3 70B/i);
     fireEvent.click(llamaCheckbox);
 
     // Submit
-    const submitButton = screen.getByRole('button', { name: /Submit Query/i });
+    const submitButton = screen.getByRole('button', { name: /Ask/i });
     fireEvent.click(submitButton);
 
     // Verify the payload
@@ -231,13 +216,13 @@ describe('QueryInput Component', () => {
       />
     );
 
-    const companySelect = screen.getByLabelText('Select Company');
+    const companySelect = screen.getByLabelText('Company');
     expect(companySelect).toBeDisabled();
 
-    const textarea = screen.getByLabelText('Your Question');
-    expect(textarea).toBeDisabled();
+    const input = screen.getByLabelText('Question');
+    expect(input).toBeDisabled();
 
-    const llamaCheckbox = screen.getByLabelText(/Llama 3.2 3B/i);
+    const llamaCheckbox = screen.getByLabelText(/Llama 3.3 70B/i);
     expect(llamaCheckbox).toBeDisabled();
 
     const submitButton = screen.getByRole('button');
@@ -253,8 +238,8 @@ describe('QueryInput Component', () => {
       />
     );
 
-    expect(screen.getByText('Processing Query...')).toBeInTheDocument();
-    expect(screen.queryByText('Submit Query')).not.toBeInTheDocument();
+    expect(screen.getByText('Running…')).toBeInTheDocument();
+    expect(screen.queryByText('Ask')).not.toBeInTheDocument();
   });
 
   it('includes all 5 primary companies from spec', () => {
@@ -266,7 +251,7 @@ describe('QueryInput Component', () => {
       />
     );
 
-    const companySelect = screen.getByLabelText('Select Company');
+    const companySelect = screen.getByLabelText('Company');
     const options = Array.from(companySelect.options).map(opt => opt.textContent);
 
     // Check for the 5 primary companies mentioned in the spec
@@ -286,13 +271,13 @@ describe('QueryInput Component', () => {
       />
     );
 
-    const companySelect = screen.getByLabelText('Select Company');
+    const companySelect = screen.getByLabelText('Company');
     fireEvent.change(companySelect, { target: { value: 'Apple Inc.' } });
 
-    const textarea = screen.getByLabelText('Your Question');
-    fireEvent.change(textarea, { target: { value: '  Test question  ' } });
+    const input = screen.getByLabelText('Question');
+    fireEvent.change(input, { target: { value: '  Test question  ' } });
 
-    const submitButton = screen.getByRole('button', { name: /Submit Query/i });
+    const submitButton = screen.getByRole('button', { name: /Ask/i });
     fireEvent.click(submitButton);
 
     expect(mockOnSubmit).toHaveBeenCalledWith(
