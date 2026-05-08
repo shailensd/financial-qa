@@ -12,9 +12,15 @@ from typing import Dict, List, Any, Callable
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from ragas import evaluate
+from ragas.metrics import faithfulness, answer_relevancy
+from datasets import Dataset
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 from app.agent.pipeline import run_agent_pipeline
 from app.ml.hybrid_retrieval import HybridRetriever
+from app import crud
 
 
 logger = logging.getLogger(__name__)
@@ -83,6 +89,7 @@ class EvaluationRunner:
             Dictionary with evaluation metrics:
             - faithfulness: Average faithfulness score (0-1)
             - answer_relevancy: Average answer relevancy score (0-1)
+            - refusal_accuracy: Accuracy of refusal decisions (0-1)
             - test_cases_run: Number of test cases executed
             - results: List of individual test case results
         """
@@ -91,6 +98,7 @@ class EvaluationRunner:
             return {
                 "faithfulness": 0.0,
                 "answer_relevancy": 0.0,
+                "refusal_accuracy": 0.0,
                 "test_cases_run": 0,
                 "results": []
             }
@@ -102,8 +110,14 @@ class EvaluationRunner:
         await retriever.build_bm25_index()
         
         results = []
-        faithfulness_scores = []
-        relevancy_scores = []
+        
+        # Prepare data for Ragas evaluation
+        ragas_data = {
+            "question": [],
+            "answer": [],
+            "contexts": [],
+            "ground_truth": []
+        }
         
         # Create a database session for the evaluation
         async with self.db_session_factory() as db:
@@ -127,71 +141,200 @@ class EvaluationRunner:
                         company=test_case.get('company')
                     )
                     
-                    # Compute simplified metrics
-                    # Note: Full Ragas integration would require the ragas library
-                    # For now, we use proxy metrics based on the agent's output
-                    
-                    # Faithfulness proxy: confidence score (already computed by Critic)
-                    faithfulness = result.get('confidence_score', 0.0)
-                    
-                    # Answer Relevancy proxy: 1.0 if not refused and has content, 0.5 if refused appropriately
-                    expected_behavior = test_case.get('expected_behavior', 'ANSWER')
-                    refusal_flag = result.get('refusal_flag', False)
+                    # Extract response data
                     response_text = result.get('response_text', '')
+                    refusal_flag = result.get('refusal_flag', False)
+                    expected_behavior = test_case.get('expected_behavior', 'ANSWER')
+                    expected_refusal = (expected_behavior == 'REFUSE')
                     
-                    if expected_behavior == 'REFUSE':
-                        # For refusal test cases, high relevancy if it refused
-                        relevancy = 1.0 if refusal_flag else 0.3
-                    else:
-                        # For answer test cases, high relevancy if it answered with content
-                        relevancy = 0.9 if (not refusal_flag and len(response_text) > 50) else 0.4
+                    # Verify refusal test cases
+                    refusal_correct = (refusal_flag == expected_refusal)
                     
-                    faithfulness_scores.append(faithfulness)
-                    relevancy_scores.append(relevancy)
+                    # Extract contexts from citations for Ragas
+                    citations = result.get('citations', [])
+                    contexts = [citation.get('chunk_text', '') for citation in citations if citation.get('chunk_text')]
                     
+                    # If no contexts available, use empty list (Ragas will handle it)
+                    if not contexts:
+                        contexts = [""]
+                    
+                    # For refusal cases, we still need to provide data to Ragas
+                    # but the metrics will be low (which is expected)
+                    if not refusal_flag:
+                        # Only add to Ragas evaluation if not refused
+                        ragas_data["question"].append(test_case['question'])
+                        ragas_data["answer"].append(response_text)
+                        ragas_data["contexts"].append(contexts)
+                        # Use expected_answer as ground truth if available, otherwise use empty string
+                        ragas_data["ground_truth"].append(test_case.get('expected_answer', ''))
+                    
+                    # Store preliminary result (will update with Ragas scores later)
                     results.append({
-                        "test_case_id": test_case['id'],
+                        "test_case_id": str(test_case['id']),
                         "question": test_case['question'],
                         "category": test_case['category'],
                         "expected_behavior": expected_behavior,
                         "refusal_flag": refusal_flag,
-                        "faithfulness": faithfulness,
-                        "answer_relevancy": relevancy,
+                        "expected_refusal": expected_refusal,
+                        "refusal_correct": refusal_correct,
+                        "response_text": response_text,
+                        "contexts": contexts,
+                        "faithfulness": 0.0,  # Will be updated
+                        "answer_relevancy": 0.0,  # Will be updated
                         "response_length": len(response_text),
                         "repair_count": result.get('repair_count', 0),
                         "latency_ms": result.get('latency_ms', 0)
                     })
                     
                     logger.info(
-                        f"Test case {i} completed: faithfulness={faithfulness:.3f}, "
-                        f"relevancy={relevancy:.3f}"
+                        f"Test case {i} completed: refusal_flag={refusal_flag}, "
+                        f"expected_refusal={expected_refusal}, refusal_correct={refusal_correct}"
                     )
                 
                 except Exception as e:
                     logger.error(f"Test case {i} failed: {e}", exc_info=True)
                     results.append({
-                        "test_case_id": test_case['id'],
+                        "test_case_id": str(test_case['id']),
                         "question": test_case['question'],
                         "category": test_case['category'],
+                        "expected_behavior": test_case.get('expected_behavior', 'ANSWER'),
+                        "refusal_flag": False,
+                        "expected_refusal": (test_case.get('expected_behavior', 'ANSWER') == 'REFUSE'),
+                        "refusal_correct": False,
+                        "response_text": "",
+                        "contexts": [],
                         "error": str(e),
                         "faithfulness": 0.0,
-                        "answer_relevancy": 0.0
+                        "answer_relevancy": 0.0,
+                        "latency_ms": 0
                     })
         
-        # Compute average metrics
+        # Compute Ragas metrics for non-refused cases
+        if ragas_data["question"]:
+            try:
+                logger.info(f"Computing Ragas metrics for {len(ragas_data['question'])} non-refused cases")
+                
+                # Create Ragas dataset
+                ragas_dataset = Dataset.from_dict(ragas_data)
+                
+                # Initialize LLM and embeddings for Ragas
+                # Use Gemini for evaluation (or the model being tested)
+                eval_llm = ChatGoogleGenerativeAI(
+                    model="gemini-2.5-flash",
+                    google_api_key=gemini_api_key
+                )
+                eval_embeddings = HuggingFaceEmbeddings(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2"
+                )
+                
+                # Evaluate with Ragas
+                ragas_results = evaluate(
+                    ragas_dataset,
+                    metrics=[faithfulness, answer_relevancy],
+                    llm=eval_llm,
+                    embeddings=eval_embeddings
+                )
+                
+                # Convert to DataFrame to extract row-level scores
+                df = ragas_results.to_pandas()
+                faithfulness_scores = df['faithfulness'].tolist()
+                relevancy_scores = df['answer_relevancy'].tolist()
+                
+                # Update results with Ragas scores
+                non_refused_idx = 0
+                for result in results:
+                    if not result['refusal_flag'] and 'error' not in result:
+                        if non_refused_idx < len(faithfulness_scores):
+                            result['faithfulness'] = float(faithfulness_scores[non_refused_idx])
+                            result['answer_relevancy'] = float(relevancy_scores[non_refused_idx])
+                            non_refused_idx += 1
+                
+                logger.info("Ragas metrics computed successfully")
+            
+            except Exception as e:
+                logger.error(f"Failed to compute Ragas metrics: {e}", exc_info=True)
+                # Continue with zero scores for Ragas metrics
+        
+        # Compute aggregate metrics
+        faithfulness_scores = [r['faithfulness'] for r in results if not r['refusal_flag'] and 'error' not in r]
+        relevancy_scores = [r['answer_relevancy'] for r in results if not r['refusal_flag'] and 'error' not in r]
+        refusal_correct_count = sum(1 for r in results if r['refusal_correct'])
+        
         avg_faithfulness = sum(faithfulness_scores) / len(faithfulness_scores) if faithfulness_scores else 0.0
         avg_relevancy = sum(relevancy_scores) / len(relevancy_scores) if relevancy_scores else 0.0
+        refusal_accuracy = refusal_correct_count / len(results) if results else 0.0
         
         logger.info(
             f"Evaluation completed for model={model}: "
             f"faithfulness={avg_faithfulness:.3f}, "
             f"answer_relevancy={avg_relevancy:.3f}, "
+            f"refusal_accuracy={refusal_accuracy:.3f}, "
             f"test_cases_run={len(results)}"
         )
+        
+        # Persist results to database
+        async with self.db_session_factory() as db:
+            # Persist per-case results
+            for result in results:
+                if 'error' not in result:
+                    await crud.create_evaluation_result(
+                        db=db,
+                        test_case_id=result['test_case_id'],
+                        model_used=model,
+                        query_text=result['question'],
+                        response_text=result['response_text'],
+                        faithfulness=result['faithfulness'],
+                        answer_relevancy=result['answer_relevancy'],
+                        refusal_flag=result['refusal_flag'],
+                        expected_refusal=result['expected_refusal'],
+                        latency_ms=result['latency_ms']
+                    )
+            
+            # Persist aggregate results
+            await crud.create_evaluation_aggregate(
+                db=db,
+                model_used=model,
+                mean_faithfulness=avg_faithfulness,
+                mean_answer_relevancy=avg_relevancy,
+                test_cases_count=len(results),
+                refusal_accuracy=refusal_accuracy
+            )
+            
+            await db.commit()
+            logger.info("Evaluation results persisted to database")
         
         return {
             "faithfulness": avg_faithfulness,
             "answer_relevancy": avg_relevancy,
+            "refusal_accuracy": refusal_accuracy,
             "test_cases_run": len(results),
             "results": results
         }
+    
+    async def aggregate(self, model: str = None) -> Dict[str, Any]:
+        """
+        Retrieve aggregate evaluation metrics from the database.
+        
+        Args:
+            model: Optional model name to filter by. If None, returns aggregates for all models.
+        
+        Returns:
+            Dictionary with aggregate metrics per model:
+            - aggregates: List of aggregate records with model, faithfulness, answer_relevancy, etc.
+        """
+        async with self.db_session_factory() as db:
+            aggregates = await crud.get_evaluation_aggregates(db=db, model_used=model)
+            
+            return {
+                "aggregates": [
+                    {
+                        "model": agg.model_used,
+                        "mean_faithfulness": agg.mean_faithfulness,
+                        "mean_answer_relevancy": agg.mean_answer_relevancy,
+                        "test_cases_count": agg.test_cases_count,
+                        "refusal_accuracy": agg.refusal_accuracy,
+                        "created_at": agg.created_at.isoformat()
+                    }
+                    for agg in aggregates
+                ]
+            }

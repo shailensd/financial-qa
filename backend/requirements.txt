@@ -24,6 +24,8 @@ rank-bm25==0.2.2
 litellm==1.55.8
 langgraph==0.2.59
 langchain-core==0.3.28
+langchain-google-genai==2.0.8
+langchain-community==0.3.14
 
 # HTML Parsing (for SEC EDGAR filings)
 beautifulsoup4==4.12.3

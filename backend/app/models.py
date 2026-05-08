@@ -164,3 +164,42 @@ class Log(Base):
     
     # Relationships
     query = relationship("Query", back_populates="logs")
+
+
+class EvaluationResult(Base):
+    """
+    Per-case evaluation results with Ragas metrics.
+    
+    Stores individual test case evaluation results for each model.
+    """
+    __tablename__ = "evaluation_results"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    test_case_id = Column(String, nullable=False, index=True)
+    model_used = Column(String, nullable=False, index=True)
+    query_text = Column(Text, nullable=False)
+    response_text = Column(Text, nullable=False)
+    faithfulness = Column(Float, nullable=False)
+    answer_relevancy = Column(Float, nullable=False)
+    refusal_flag = Column(Boolean, nullable=False, default=False)
+    expected_refusal = Column(Boolean, nullable=False, default=False)
+    refusal_correct = Column(Boolean, nullable=False, default=True)
+    latency_ms = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+
+class EvaluationAggregate(Base):
+    """
+    Aggregate evaluation metrics per model.
+    
+    Stores mean Faithfulness and AnswerRelevancy across all test cases for each model.
+    """
+    __tablename__ = "evaluation_aggregates"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    model_used = Column(String, nullable=False, index=True)
+    mean_faithfulness = Column(Float, nullable=False)
+    mean_answer_relevancy = Column(Float, nullable=False)
+    test_cases_count = Column(Integer, nullable=False)
+    refusal_accuracy = Column(Float, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)

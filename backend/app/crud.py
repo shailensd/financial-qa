@@ -404,3 +404,158 @@ async def get_logs(
     
     result = await db.execute(stmt)
     return list(result.unique().scalars().all())
+
+
+# ============================================================================
+# Evaluation Operations
+# ============================================================================
+
+async def create_evaluation_result(
+    db: AsyncSession,
+    test_case_id: str,
+    model_used: str,
+    query_text: str,
+    response_text: str,
+    faithfulness: float,
+    answer_relevancy: float,
+    refusal_flag: bool,
+    expected_refusal: bool,
+    latency_ms: int,
+) -> "EvaluationResult":
+    """
+    Create a new evaluation result record.
+    
+    Args:
+        db: Database session
+        test_case_id: Test case identifier
+        model_used: Model used for evaluation
+        query_text: Query text
+        response_text: Generated response text
+        faithfulness: Ragas faithfulness score
+        answer_relevancy: Ragas answer relevancy score
+        refusal_flag: Whether the query was refused
+        expected_refusal: Whether refusal was expected
+        latency_ms: Response latency in milliseconds
+    
+    Returns:
+        Created EvaluationResult instance
+    """
+    from app.models import EvaluationResult
+    
+    refusal_correct = (refusal_flag == expected_refusal)
+    
+    result = EvaluationResult(
+        test_case_id=test_case_id,
+        model_used=model_used,
+        query_text=query_text,
+        response_text=response_text,
+        faithfulness=faithfulness,
+        answer_relevancy=answer_relevancy,
+        refusal_flag=refusal_flag,
+        expected_refusal=expected_refusal,
+        refusal_correct=refusal_correct,
+        latency_ms=latency_ms,
+    )
+    db.add(result)
+    await db.flush()
+    await db.refresh(result)
+    return result
+
+
+async def create_evaluation_aggregate(
+    db: AsyncSession,
+    model_used: str,
+    mean_faithfulness: float,
+    mean_answer_relevancy: float,
+    test_cases_count: int,
+    refusal_accuracy: float,
+) -> "EvaluationAggregate":
+    """
+    Create a new evaluation aggregate record.
+    
+    Args:
+        db: Database session
+        model_used: Model used for evaluation
+        mean_faithfulness: Mean faithfulness score across all test cases
+        mean_answer_relevancy: Mean answer relevancy score across all test cases
+        test_cases_count: Number of test cases evaluated
+        refusal_accuracy: Accuracy of refusal decisions (0.0-1.0)
+    
+    Returns:
+        Created EvaluationAggregate instance
+    """
+    from app.models import EvaluationAggregate
+    
+    aggregate = EvaluationAggregate(
+        model_used=model_used,
+        mean_faithfulness=mean_faithfulness,
+        mean_answer_relevancy=mean_answer_relevancy,
+        test_cases_count=test_cases_count,
+        refusal_accuracy=refusal_accuracy,
+    )
+    db.add(aggregate)
+    await db.flush()
+    await db.refresh(aggregate)
+    return aggregate
+
+
+async def get_evaluation_results(
+    db: AsyncSession,
+    model_used: Optional[str] = None,
+    test_case_id: Optional[str] = None,
+    limit: int = 100,
+) -> List["EvaluationResult"]:
+    """
+    Retrieve evaluation results with optional filtering.
+    
+    Args:
+        db: Database session
+        model_used: Optional model filter
+        test_case_id: Optional test case filter
+        limit: Maximum number of results to retrieve
+    
+    Returns:
+        List of EvaluationResult instances ordered by created_at descending
+    """
+    from app.models import EvaluationResult
+    
+    stmt = select(EvaluationResult)
+    
+    if model_used:
+        stmt = stmt.where(EvaluationResult.model_used == model_used)
+    if test_case_id:
+        stmt = stmt.where(EvaluationResult.test_case_id == test_case_id)
+    
+    stmt = stmt.order_by(desc(EvaluationResult.created_at)).limit(limit)
+    
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_evaluation_aggregates(
+    db: AsyncSession,
+    model_used: Optional[str] = None,
+    limit: int = 10,
+) -> List["EvaluationAggregate"]:
+    """
+    Retrieve evaluation aggregates with optional filtering.
+    
+    Args:
+        db: Database session
+        model_used: Optional model filter
+        limit: Maximum number of aggregates to retrieve
+    
+    Returns:
+        List of EvaluationAggregate instances ordered by created_at descending
+    """
+    from app.models import EvaluationAggregate
+    
+    stmt = select(EvaluationAggregate)
+    
+    if model_used:
+        stmt = stmt.where(EvaluationAggregate.model_used == model_used)
+    
+    stmt = stmt.order_by(desc(EvaluationAggregate.created_at)).limit(limit)
+    
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
