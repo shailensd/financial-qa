@@ -7,7 +7,7 @@ React frontend application for the FinDoc Intelligence financial Q&A system.
 - **React 19.2.5** - UI framework
 - **Vite 8.0.10** - Build tool and dev server
 - **Tailwind CSS** - Utility-first CSS framework
-- **Axios** - HTTP client (to be added)
+- **Axios** - HTTP client for API communication
 
 ## Project Structure
 
@@ -84,16 +84,13 @@ The following Tailwind directives are included in `src/index.css`:
 
 Vite is configured with the React plugin in `vite.config.js`.
 
-## Next Steps
+## Supported Models
 
-The following components will be implemented in subsequent tasks:
-
-- **QueryInput** - Company selector, question textarea, model checkboxes
-- **AnswerDisplay** - Tabbed/grid layout for multi-model responses
-- **CitationList** - Expandable source chunk cards
-- **SessionContext** - Session state and memory display
-- **AgentTrace** - Agent reasoning visualization
+The frontend supports multi-model comparisons by allowing users to toggle the following LLMs:
+- **Llama 3.3 70B Versatile** (via Groq)
+- **Llama 4 Scout 17B** (via Groq)
+- **Gemini 2.5 Flash** (via Google AI Studio)
 
 ## API Integration
 
-The frontend will communicate with the FastAPI backend running on port 8000. API service layer will be implemented using Axios with error interceptors.
+The frontend communicates with the FastAPI backend running on `http://localhost:8000`. The API service layer (`src/services/api.js`) uses Axios with error interceptors to normalize backend responses and handle connection issues gracefully.

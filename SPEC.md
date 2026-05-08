@@ -23,7 +23,8 @@
 
 ### 2.3. ML & LLM Integration
 - **Primary (open-source):** Llama 3.3 70B Versatile via Groq API
-- **Comparator 2 (commercial):** Gemini 2.5 Flash via Google AI Studio API
+- **Comparator 2 (open-source):** Llama 4 Scout 17B via Groq API
+- **Comparator 3 (commercial):** Gemini 2.5 Flash via Google AI Studio API
 - **LLM Router:** LiteLLM (unified calling format across all models)
 - **Agent Framework:** LangGraph `StateGraph` — Planner-Executor-Critic pipeline with stateful memory
 
@@ -79,7 +80,7 @@
 
 ### Phase 3: LLM Integration & Tool Registry
 
-1. **LiteLLM Integration** — unify calling format for Groq (Llama 3.3 70B) and Google API (Gemini 2.5 Flash).
+1. **LiteLLM Integration** — unify calling format for Groq (Llama 3.3 70B, Llama 4 Scout) and Google API (Gemini 2.5 Flash).
 2. **Tool Registry** (`backend/app/agent/tools.py`) — define 3 callable tools with explicit input/output schemas and firing restrictions:
    - `CALCULATE` — input: expression string; output: numeric result. *Fires only when query contains numeric keywords (revenue, margin, ratio, growth, etc.)*
    - `LOOKUP` — input: entity + attribute; output: retrieved chunk text. *Always available.*
@@ -148,7 +149,7 @@
 
 ## 5. Non-Negotiable Compliance Checklist
 
-- [ ] Multi-model evaluation across 2 models (Llama 3.3 70B Versatile and Gemini 2.5 Flash)
+- [ ] Multi-model evaluation across 3 models (Llama 3.3 70B Versatile, Llama 4 Scout 17B, and Gemini 2.5 Flash)
 - [ ] Planner-Executor-Critic agent loop implemented in LangGraph and demonstrable via `AgentTrace` UI
 - [ ] Hybrid retrieval (Dense + Sparse + RRF fusion) implemented
 - [ ] Refusal logic for investment advice and future predictions implemented

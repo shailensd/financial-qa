@@ -8,7 +8,7 @@ A multi-model financial Q&A system that answers questions about SEC filings usin
 |---|---|
 | **Frontend** | React 18 + Vite, Vanilla CSS (dark mode) |
 | **Backend** | FastAPI + SQLAlchemy (async) + PostgreSQL |
-| **LLMs** | Gemini 2.5 Flash (Google AI) · Llama 3.3 70B Versatile (Groq) |
+| **LLMs** | Gemini 2.5 Flash (Google AI) · Llama 3.3 70B Versatile (Groq) · Llama 4 Scout 17B (Groq) |
 | **Retrieval** | ChromaDB (dense) + BM25Okapi (sparse) fused via Reciprocal Rank Fusion |
 | **Agent** | LangGraph — Planner → Executor → Critic loop (max 2 repair iterations) |
 | **Embeddings** | `all-MiniLM-L6-v2` via `sentence-transformers` |
@@ -96,7 +96,7 @@ npm run dev   # http://localhost:5173
 }
 ```
 
-`models` accepts any combination of `"llama"` and `"gemini"`. Models run **sequentially** to avoid rate limits and RAM pressure.
+`models` accepts any combination of `"llama"`, `"gemma"` (mapped to Llama 4 Scout), and `"gemini"`. Models run **sequentially** to avoid rate limits and RAM pressure.
 
 ## Agent Pipeline
 
